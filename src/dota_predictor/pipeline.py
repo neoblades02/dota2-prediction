@@ -53,11 +53,11 @@ def normalize_reference(engine: Engine) -> dict[str, int]:
         ("pro_players", "/proPlayers", normalize_pro_players_payload),
     ]
     with engine.begin() as conn:
-        counts["valve_patches"] = normalize_valve_patches(conn)
         for key, endpoint, fn in steps:
             payload = _latest_payload(conn, endpoint)
             if isinstance(payload, list):
                 counts[key] = fn(conn, payload)
+        counts["valve_patches"] = normalize_valve_patches(conn)
     return counts
 
 

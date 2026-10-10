@@ -14,6 +14,13 @@ from dota_predictor.storage.upsert import dialect_insert
 logger = get_logger("normalize.patches")
 
 
+def _patch_id_for_version(conn: Connection, version: str) -> int | None:
+    """Lowest patch_id carrying this version name, so the dotaconstants id beats a provisional Valve one."""
+    return conn.execute(
+        select(patches.c.patch_id).where(patches.c.version == version).order_by(patches.c.patch_id).limit(1)
+    ).scalar_one_or_none()
+
+
 def normalize_dotaconstants_patches(conn: Connection, patches_data: list[dict[str, Any]]) -> int:
     """Normalize dotaconstants patch.json list with integer IDs matching OpenDota match.patch."""
     count = 0
@@ -22,6 +29,8 @@ def normalize_dotaconstants_patches(conn: Connection, patches_data: list[dict[st
         if p_id is None:
             continue
         v_name = p.get("name")
+        if _patch_id_for_version(conn, v_name) not in (None, p_id):
+            continue  # Valve feed already created this version under a provisional id; never add a second row
         date_str = p.get("date")
         dt = datetime.fromisoformat(date_str.replace("Z", "+00:00")) if date_str else None
 
@@ -79,7 +88,7 @@ def normalize_valve_patches(conn: Connection) -> int:
         start_utc = datetime.fromtimestamp(ts, tz=UTC) if ts else None
 
         # First check if this version already exists in patches (e.g. from dotaconstants)
-        existing = conn.execute(select(patches.c.patch_id).where(patches.c.version == p_name)).scalar_one_or_none()
+        existing = _patch_id_for_version(conn, p_name)
 
         if existing is not None:
             conn.execute(
@@ -136,7 +145,7 @@ def resolve_patch_for_match(
         row = conn.execute(
             select(patches.c.patch_id)
             .where(patches.c.effective_at_utc <= match_time_utc)
-            .order_by(desc(patches.c.effective_at_utc))
+            .order_by(desc(patches.c.effective_at_utc), patches.c.patch_id)
             .limit(1)
         ).scalar_one_or_none()
         if row is not None:
