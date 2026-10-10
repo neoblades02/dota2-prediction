@@ -1,0 +1,574 @@
+[
+ {
+  "id": 1738561,
+  "name": "Semifinal 2: KukuysV3 vs IAC",
+  "status": "not_started",
+  "begin_at": "2026-10-10T08:00:00Z",
+  "scheduled_at": "2026-10-10T08:00:00Z",
+  "number_of_games": 3,
+  "match_type": "best_of",
+  "tournament_id": 22159,
+  "league": {
+   "id": 4125,
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "Southeast Asia Open Qualifier 1 2026"
+  },
+  "tournament": {
+   "id": 22159,
+   "name": "Playoffs",
+   "tier": "d"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 138432,
+     "name": "KukuysV3",
+     "acronym": null
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 129891,
+     "name": "InterActive Philippines",
+     "acronym": "IAC"
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 138432,
+    "score": 0
+   },
+   {
+    "team_id": 129891,
+    "score": 0
+   }
+  ],
+  "winner_id": null,
+  "forfeit": false
+ },
+ {
+  "id": 1738560,
+  "name": "Semifinal 1: RB vs FF",
+  "status": "not_started",
+  "begin_at": "2026-10-10T08:10:00Z",
+  "scheduled_at": "2026-10-10T08:10:00Z",
+  "number_of_games": 3,
+  "match_type": "best_of",
+  "tournament_id": 22159,
+  "league": {
+   "id": 4125,
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "Southeast Asia Open Qualifier 1 2026"
+  },
+  "tournament": {
+   "id": 22159,
+   "name": "Playoffs",
+   "tier": "d"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 139367,
+     "name": "Royal Bear",
+     "acronym": "RB"
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 139366,
+     "name": "FunFun",
+     "acronym": "FF"
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 139367,
+    "score": 0
+   },
+   {
+    "team_id": 139366,
+    "score": 0
+   }
+  ],
+  "winner_id": null,
+  "forfeit": false
+ },
+ {
+  "id": 1738321,
+  "name": "Third Place Match: CR vs Cresent",
+  "status": "not_started",
+  "begin_at": "2026-10-10T10:00:00Z",
+  "scheduled_at": "2026-10-10T10:00:00Z",
+  "number_of_games": 3,
+  "match_type": "best_of",
+  "tournament_id": 22158,
+  "league": {
+   "id": 4125,
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "China Open Qualifier 1 season 30 2026"
+  },
+  "tournament": {
+   "id": 22158,
+   "name": "Playoffs",
+   "tier": "d"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 137428,
+     "name": "Cloud Rising",
+     "acronym": "CR"
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 139365,
+     "name": "Cresent",
+     "acronym": null
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 137428,
+    "score": 0
+   },
+   {
+    "team_id": 139365,
+    "score": 0
+   }
+  ],
+  "winner_id": null,
+  "forfeit": false
+ },
+ {
+  "id": 1709126,
+  "name": "Upper Bracket Final: TY vs TS",
+  "status": "not_started",
+  "begin_at": "2026-10-10T10:30:00Z",
+  "scheduled_at": "2026-10-10T10:30:00Z",
+  "number_of_games": 3,
+  "match_type": "best_of",
+  "tournament_id": 22039,
+  "league": {
+   "id": 5319,
+   "name": "BLAST Slam"
+  },
+  "serie": {
+   "full_name": "Season 8 2026"
+  },
+  "tournament": {
+   "id": 22039,
+   "name": "Playoffs",
+   "tier": "a"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 137073,
+     "name": "Team Yandex",
+     "acronym": "TY"
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 1669,
+     "name": "Team Spirit",
+     "acronym": "TS"
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 137073,
+    "score": 0
+   },
+   {
+    "team_id": 1669,
+    "score": 0
+   }
+  ],
+  "winner_id": null,
+  "forfeit": false
+ },
+ {
+  "id": 1739611,
+  "name": "Semifinal 2: cyxariki vs Shadow Dance",
+  "status": "not_started",
+  "begin_at": "2026-10-10T13:00:00Z",
+  "scheduled_at": "2026-10-10T13:00:00Z",
+  "number_of_games": 3,
+  "match_type": "best_of",
+  "tournament_id": 22165,
+  "league": {
+   "id": 4125,
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "Eastern Europe Open Qualifier 1 season 30 2026"
+  },
+  "tournament": {
+   "id": 22165,
+   "name": "Playoffs",
+   "tier": "d"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 130763,
+     "name": "Ka4kanarskie cyxariki",
+     "acronym": "cyxariki"
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 139380,
+     "name": "Shadow Dance",
+     "acronym": null
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 130763,
+    "score": 0
+   },
+   {
+    "team_id": 139380,
+    "score": 0
+   }
+  ],
+  "winner_id": null,
+  "forfeit": false
+ },
+ {
+  "id": 1739627,
+  "name": "Semifinal 2:  oveA vs P-",
+  "status": "not_started",
+  "begin_at": "2026-10-10T14:00:00Z",
+  "scheduled_at": "2026-10-10T14:00:00Z",
+  "number_of_games": 3,
+  "match_type": "best_of",
+  "tournament_id": 22166,
+  "league": {
+   "id": 4125,
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "Western Europe Open Qualifier 1 season 30 2026"
+  },
+  "tournament": {
+   "id": 22166,
+   "name": "Playoffs",
+   "tier": "d"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 139391,
+     "name": " oveA",
+     "acronym": null
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 129222,
+     "name": "potn9ki",
+     "acronym": "P-"
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 139391,
+    "score": 0
+   },
+   {
+    "team_id": 129222,
+    "score": 0
+   }
+  ],
+  "winner_id": null,
+  "forfeit": false
+ },
+ {
+  "id": 1739626,
+  "name": "Semifinal 1: PckCp vs old blood",
+  "status": "not_started",
+  "begin_at": "2026-10-10T14:00:00Z",
+  "scheduled_at": "2026-10-10T14:00:00Z",
+  "number_of_games": 3,
+  "match_type": "best_of",
+  "tournament_id": 22166,
+  "league": {
+   "id": 4125,
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "Western Europe Open Qualifier 1 season 30 2026"
+  },
+  "tournament": {
+   "id": 22166,
+   "name": "Playoffs",
+   "tier": "d"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 128357,
+     "name": "PuckChamp",
+     "acronym": "PckCp"
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 139389,
+     "name": "old blood",
+     "acronym": null
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 128357,
+    "score": 0
+   },
+   {
+    "team_id": 139389,
+    "score": 0
+   }
+  ],
+  "winner_id": null,
+  "forfeit": false
+ },
+ {
+  "id": 1709129,
+  "name": "Lower Bracket Semifinal: PARI vs AUR",
+  "status": "not_started",
+  "begin_at": "2026-10-10T14:00:00Z",
+  "scheduled_at": "2026-10-10T14:00:00Z",
+  "number_of_games": 3,
+  "match_type": "best_of",
+  "tournament_id": 22039,
+  "league": {
+   "id": 5319,
+   "name": "BLAST Slam"
+  },
+  "serie": {
+   "full_name": "Season 8 2026"
+  },
+  "tournament": {
+   "id": 22039,
+   "name": "Playoffs",
+   "tier": "a"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 135712,
+     "name": "PARIVISION",
+     "acronym": "PARI"
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 133882,
+     "name": "Aurora",
+     "acronym": "AUR"
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 135712,
+    "score": 0
+   },
+   {
+    "team_id": 133882,
+    "score": 0
+   }
+  ],
+  "winner_id": null,
+  "forfeit": false
+ },
+ {
+  "id": 1740310,
+  "name": "Semifinal 2: Skyreavers vs RL",
+  "status": "not_started",
+  "begin_at": "2026-10-10T21:00:00Z",
+  "scheduled_at": "2026-10-10T21:00:00Z",
+  "number_of_games": 3,
+  "match_type": "best_of",
+  "tournament_id": 22167,
+  "league": {
+   "id": 4125,
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "South America Open Qualifier 1 season 30 2026"
+  },
+  "tournament": {
+   "id": 22167,
+   "name": "Playoffs",
+   "tier": "d"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 139394,
+     "name": "Skyreavers",
+     "acronym": null
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 137808,
+     "name": "Rottweilas Latam",
+     "acronym": "RL"
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 139394,
+    "score": 0
+   },
+   {
+    "team_id": 137808,
+    "score": 0
+   }
+  ],
+  "winner_id": null,
+  "forfeit": false
+ },
+ {
+  "id": 1740309,
+  "name": "Semifinal 1: HKR vs New Growth",
+  "status": "not_started",
+  "begin_at": "2026-10-10T21:00:00Z",
+  "scheduled_at": "2026-10-10T21:00:00Z",
+  "number_of_games": 3,
+  "match_type": "best_of",
+  "tournament_id": 22167,
+  "league": {
+   "id": 4125,
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "South America Open Qualifier 1 season 30 2026"
+  },
+  "tournament": {
+   "id": 22167,
+   "name": "Playoffs",
+   "tier": "d"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 127965,
+     "name": "Hokori",
+     "acronym": "HKR"
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 137905,
+     "name": "New Growth",
+     "acronym": null
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 127965,
+    "score": 0
+   },
+   {
+    "team_id": 137905,
+    "score": 0
+   }
+  ],
+  "winner_id": null,
+  "forfeit": false
+ },
+ {
+  "id": 1709130,
+  "name": "Lower Bracket Final: TBD vs TBD",
+  "status": "not_started",
+  "begin_at": "2026-10-11T09:00:00Z",
+  "scheduled_at": "2026-10-11T09:00:00Z",
+  "number_of_games": 3,
+  "match_type": "best_of",
+  "tournament_id": 22039,
+  "league": {
+   "id": 5319,
+   "name": "BLAST Slam"
+  },
+  "serie": {
+   "full_name": "Season 8 2026"
+  },
+  "tournament": {
+   "id": 22039,
+   "name": "Playoffs",
+   "tier": "a"
+  },
+  "opponents": [],
+  "results": [],
+  "winner_id": null,
+  "forfeit": false
+ },
+ {
+  "id": 1709131,
+  "name": "Grand Final: TBD vs TBD",
+  "status": "not_started",
+  "begin_at": "2026-10-11T13:00:00Z",
+  "scheduled_at": "2026-10-11T13:00:00Z",
+  "number_of_games": 5,
+  "match_type": "best_of",
+  "tournament_id": 22039,
+  "league": {
+   "id": 5319,
+   "name": "BLAST Slam"
+  },
+  "serie": {
+   "full_name": "Season 8 2026"
+  },
+  "tournament": {
+   "id": 22039,
+   "name": "Playoffs",
+   "tier": "a"
+  },
+  "opponents": [],
+  "results": [],
+  "winner_id": null,
+  "forfeit": false
+ }
+]

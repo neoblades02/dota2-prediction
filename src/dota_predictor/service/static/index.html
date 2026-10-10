@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dota match predictions</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Crect width=%278%27 height=%2716%27 fill=%27%236aa6d6%27/%3E%3Crect x=%278%27 width=%278%27 height=%2716%27 fill=%27%23d99a4e%27/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #141b22; --surface: #1b242e; --surface-2: #222d39; --line: #2e3b49;
+  --text: #ebe6d9; --muted: #98a2ac;
+  --team-a: #6aa6d6; --team-b: #d99a4e; --on-team: #0e1419;
+  --up: #7ccf8a; --down: #e27a6e; --warn: #e3c65b;
+  --radiant: #6cbf6a; --dire: #d25a4a;
+  --focus: #f2e6b8;
+  --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Barlow", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #eef1f4; --surface: #ffffff; --surface-2: #f5f7f9; --line: #d4dbe2;
+    --text: #17212b; --muted: #5a6672;
+    --team-a: #2f6fa8; --team-b: #94560f; --on-team: #ffffff;
+    --up: #23803a; --down: #b9412f; --warn: #8a6d00;
+    --radiant: #2f8a2d; --dire: #b23b2b; --focus: #17212b;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 400 15px/1.5 var(--body); font-variant-numeric: tabular-nums;
+}
+a { color: inherit; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+
+/* Header and status */
+header { border-bottom: 1px solid var(--line); background: var(--surface); }
+.top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding-top: 14px; padding-bottom: 10px; }
+h1 { font: 700 26px/1 var(--display); letter-spacing: .01em; margin: 0; }
+.status { margin-left: auto; display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
+.job { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.ok { background: var(--up); } .dot.err { background: var(--down); } .dot.live { background: var(--dire); }
+nav { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+nav button {
+  background: none; border: 0; border-bottom: 3px solid transparent; padding: 8px 12px 9px;
+  font: 600 17px/1 var(--display); color: var(--muted); cursor: pointer; white-space: nowrap;
+}
+nav button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--team-a); }
+.count { font: 500 13px/1 var(--body); background: var(--surface-2); border-radius: 9px; padding: 2px 6px; margin-left: 4px; }
+.count.live { background: var(--dire); color: #fff; }
+
+main.wrap { padding-top: 22px; padding-bottom: 60px; }
+h2 { font: 600 22px/1.2 var(--display); margin: 26px 0 10px; }
+h2:first-child { margin-top: 4px; }
+.lede { color: var(--muted); margin: 0 0 14px; max-width: 70ch; }
+.alerts { display: grid; gap: 8px; margin-bottom: 18px; }
+.alert { border-left: 3px solid var(--warn); background: var(--surface); padding: 10px 12px; border-radius: 0 6px 6px 0; }
+.empty, .state { color: var(--muted); padding: 28px 0; max-width: 60ch; }
+.state strong { display: block; color: var(--text); font: 600 22px/1.2 var(--display); margin-bottom: 6px; }
+
+.toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.toggle {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 5px 10px; cursor: pointer;
+  font-size: 13px; color: var(--muted);
+}
+.toggle[aria-pressed="true"] { color: var(--text); border-color: var(--team-a); }
+
+/* Match rows */
+.match { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+.meta { display: flex; gap: 12px; flex-wrap: wrap; align-items: baseline; color: var(--muted); font-size: 13px; }
+.meta .time { color: var(--text); font-weight: 600; font-size: 15px; }
+.tier { border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 12px; }
+.tier.major { border-color: var(--warn); color: var(--warn); }
+.flag { color: var(--warn); }
+.versus { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, 2.2fr) minmax(0, 1fr); gap: 12px; align-items: center; margin: 10px 0 6px; }
+.team { font: 600 21px/1.1 var(--display); overflow-wrap: anywhere; }
+.team.b { text-align: right; }
+.team small { display: block; font: 400 12px/1.4 var(--body); color: var(--muted); }
+
+/* The series bar: the one loud element */
+.bar { position: relative; display: flex; height: 30px; border-radius: 4px; overflow: hidden; background: var(--surface-2); }
+.bar .a, .bar .b { display: flex; align-items: center; font: 700 16px/1 var(--display); color: var(--on-team); min-width: 0; }
+.bar .a { background: var(--team-a); justify-content: flex-start; padding-left: 8px; }
+.bar .b { background: var(--team-b); justify-content: flex-end; padding-right: 8px; }
+.bar .split { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); transform: translateX(-1px); }
+.bar.pending { justify-content: center; align-items: center; color: var(--muted); font-size: 13px; }
+.sub { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 13px; margin-top: 6px; }
+.sub b { color: var(--text); font-weight: 600; }
+.details-toggle { background: none; border: 0; padding: 0; color: var(--team-a); cursor: pointer; font-size: 13px; font-weight: 600; margin-left: auto; }
+
+/* Markets */
+.markets { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 13px; padding: 4px 8px 6px 0; }
+td { padding: 5px 8px 5px 0; border-top: 1px solid var(--line); vertical-align: middle; }
+td.num, th.num { text-align: right; }
+tr.group td { border-top: 0; padding-top: 12px; font: 600 15px/1.2 var(--display); color: var(--muted); }
+input.odds {
+  width: 76px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-2); text-align: right;
+}
+.edge.pos { color: var(--up); font-weight: 600; } .edge.neg { color: var(--down); }
+.hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+
+/* Live */
+.score { font: 700 30px/1 var(--display); text-align: center; }
+.heroes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; font-size: 13px; }
+.heroes div:last-child { text-align: right; }
+.side { font-size: 12px; font-weight: 600; }
+.side.radiant { color: var(--radiant); } .side.dire { color: var(--dire); }
+
+/* Tournaments */
+.tlist { display: grid; gap: 8px; }
+.trow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+.trow .name { font: 600 19px/1.2 var(--display); }
+.trow .counts { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 13px; grid-column: 1 / -1; }
+.trow .counts b { color: var(--text); }
+
+/* Record */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.stat .v { font: 700 28px/1.1 var(--display); }
+.stat .k { color: var(--muted); font-size: 13px; }
+.split-table td:first-child { color: var(--muted); }
+.calib { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 20px; align-items: start; }
+svg text { fill: var(--muted); font: 12px var(--body); }
+.won { color: var(--up); } .lost { color: var(--down); }
+
+/* Mapping */
+.link { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; }
+.link .name { font: 600 19px/1.2 var(--display); }
+.choices { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+.choice { border: 1px solid var(--line); background: var(--surface-2); border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 14px; }
+.choice:hover { border-color: var(--team-a); }
+input.search { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); width: 200px; max-width: 100%; }
+
+@media (max-width: 640px) {
+  .versus { grid-template-columns: 1fr 1fr; }
+  .versus .bar { grid-column: 1 / -1; grid-row: 2; }
+  .team { font-size: 19px; }
+  .calib { grid-template-columns: 1fr; }
+  .status { margin-left: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bar .a, .bar .b { transition: flex-basis .4s ease; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap top">
+    <h1>Dota match predictions</h1>
+    <div class="status" id="status" aria-live="polite"></div>
+  </div>
+  <div class="wrap">
+    <nav role="tablist" aria-label="Sections" id="tabs">
+      <button role="tab" data-tab="upcoming">Upcoming</button>
+      <button role="tab" data-tab="live">Live<span class="count" id="live-count" hidden></span></button>
+      <button role="tab" data-tab="tournaments">Tournaments</button>
+      <button role="tab" data-tab="results">Results</button>
+      <button role="tab" data-tab="record">Track record</button>
+      <button role="tab" data-tab="mapping">Team mapping<span class="count" id="map-count" hidden></span></button>
+    </nav>
+  </div>
+</header>
+<main class="wrap" id="main" role="tabpanel" tabindex="-1"></main>
+
+<script>
+"use strict";
+const MAJOR = new Set(["s", "a", "premium"]);
+const REFRESH_MS = 30000;
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch { return d; } },
+  set(k, v) { try { v === "" ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} },
+};
+const state = {
+  tab: store.get("tab", "upcoming"),
+  showLowTiers: store.get("lowTiers", "0") === "1",
+  open: new Set(),
+  status: null,
+};
+
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const pct = (p, d = 1) => (p * 100).toFixed(d) + "%";
+const fmtTime = (iso) => iso ? new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(iso)) : "Time to be announced";
+const fmtDay = (iso) => {
+  if (!iso) return "Date to be announced";
+  const d = new Date(iso), today = new Date(), tmr = new Date(); tmr.setDate(today.getDate() + 1);
+  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === tmr.toDateString()) return "Tomorrow";
+  return new Intl.DateTimeFormat(undefined, { weekday: "long", day: "numeric", month: "short" }).format(d);
+};
+const fmtDate = (iso) => iso ? new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" }).format(new Date(iso)) : "?";
+const ago = (iso) => {
+  if (!iso) return "never";
+  const s = Math.max(0, (Date.now() - new Date(iso)) / 1000);
+  if (s < 90) return "just now";
+  if (s < 5400) return Math.round(s / 60) + " min ago";
+  return Math.round(s / 3600) + " h ago";
+};
+const until = (iso) => {
+  if (!iso) return "";
+  const m = Math.round((new Date(iso) - Date.now()) / 60000);
+  if (m <= 0) return "starting";
+  if (m < 60) return "in " + m + " min";
+  if (m < 48 * 60) return "in " + Math.floor(m / 60) + " h " + (m % 60) + " min";
+  return "in " + Math.round(m / 1440) + " days";
+};
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, { credentials: "same-origin", headers: { "Content-Type": "application/json" }, ...opts });
+  if (r.status === 503) { const body = await r.json(); const e = new Error("not ready"); e.notReady = body.detail; throw e; }
+  if (!r.ok) throw new Error((await r.text()) || r.statusText);
+  return r.json();
+}
+
+/* ---------- shared pieces ---------- */
+
+function seriesBar(p, aName, bName, cls = "") {
+  const a = Math.round(p * 1000) / 10;
+  return `<div class="bar ${cls}" role="img" aria-label="${esc(aName)} ${a}% to win the series, ${esc(bName)} ${(100 - a).toFixed(1)}%">
+    <div class="a" style="flex-basis:${a}%">${a >= 12 ? a.toFixed(1) + "%" : ""}</div>
+    <div class="b" style="flex-basis:${100 - a}%">${a <= 88 ? (100 - a).toFixed(1) + "%" : ""}</div>
+    <div class="split" style="left:${a}%"></div>
+  </div>`;
+}
+
+function tierTag(t) {
+  if (!t) return "";
+  const label = t.length === 1 ? "Tier " + t.toUpperCase() : t[0].toUpperCase() + t.slice(1);
+  return `<span class="tier ${MAJOR.has(t) ? "major" : ""}">${esc(label)}</span>`;
+}
+
+function marketsTable(fx) {
+  const rows = fx.prediction.rows;
+  let html = `<table><thead><tr><th>Outcome</th><th class="num">Model</th><th class="num">Fair odds</th>
+    <th class="num">Bookmaker odds</th><th class="num">Edge</th></tr></thead><tbody>`;
+  for (const r of rows) {
+    html += `<tr class="group"><td colspan="5">${esc(r.label.replace(/:$/, ""))}</td></tr>`;
+    for (const o of r.outcomes) {
+      const key = `odds:${fx.fixture_id}|${r.label}|${o.name}`;
+      const saved = store.get(key, "");
+      html += `<tr><td>${esc(o.name)}</td><td class="num">${pct(o.p)}</td><td class="num">${isFinite(o.odds) ? o.odds.toFixed(2) : "–"}</td>
+        <td class="num"><input class="odds" inputmode="decimal" aria-label="Bookmaker odds for ${esc(o.name)}, ${esc(r.label)}"
+          data-key="${esc(key)}" data-p="${o.p}" value="${esc(saved)}"></td>
+        <td class="num edge" data-edge-for="${esc(key)}">${edgeText(o.p, saved)}</td></tr>`;
+    }
+  }
+  return html + `</tbody></table><p class="hint">Edge is model probability times bookmaker odds, minus one. Positive means the price is better than the model's fair odds. Odds you type stay in this browser only.</p>`;
+}
+
+function edgeText(p, oddsStr) {
+  const odds = parseFloat(String(oddsStr).replace(",", "."));
+  if (!(odds > 1)) return "";
+  const e = p * odds - 1;
+  return `<span class="edge ${e > 0 ? "pos" : "neg"}">${e > 0 ? "+" : ""}${(e * 100).toFixed(1)}%</span>`;
+}
+
+function matchCard(fx, { live = false } = {}) {
+  const a = fx.team_a_name, b = fx.team_b_name, p = fx.prediction;
+  const lp = fx.live && fx.live.prediction;
+  const pSeries = lp ? lp.p_series : p && p.p_series;
+  let bar;
+  if (pSeries != null) bar = seriesBar(pSeries, a, b);
+  else if (fx.tbd) bar = `<div class="bar pending">Opponents to be decided</div>`;
+  else if (fx.needs_mapping) bar = `<div class="bar pending">Needs team mapping</div>`;
+  else bar = `<div class="bar pending">No prediction</div>`;
+
+  const meta = [
+    `<span class="time">${live ? "Map " + ((fx.score_a || 0) + (fx.score_b || 0) + 1) : fmtTime(fx.begin_at_utc)}</span>`,
+    live ? "" : `<span>${esc(until(fx.begin_at_utc))}</span>`,
+    `<span>${esc(fx.league_name || "Unknown league")}</span>`,
+    `<span>Bo${fx.best_of}</span>`,
+    tierTag(fx.tier),
+    fx.source === "opendota" ? `<span title="Not in the schedule; found from the live game">From live game</span>` : "",
+    p && p.low_data ? `<span class="flag" title="One team has fewer than 20 games on record">Low data</span>` : "",
+  ].join("");
+
+  const sub = [];
+  if (p) {
+    sub.push(`<span>Per map <b>${pct(p.p_map)}</b></span>`);
+    sub.push(`<span>Rating <b>${Math.round(p.elo_a)}</b> vs <b>${Math.round(p.elo_b)}</b></span>`);
+    sub.push(`<span>Games on record <b>${p.games_a}</b> and <b>${p.games_b}</b></span>`);
+  }
+  if (lp) sub.unshift(`<span>This map <b>${pct(lp.p_map_now)}</b> after the draft</span>`);
+  const canExpand = p && p.rows;
+  const isOpen = state.open.has(fx.fixture_id);
+  if (canExpand) sub.push(`<button class="details-toggle" aria-expanded="${isOpen}" data-open="${esc(fx.fixture_id)}">${isOpen ? "Hide markets" : "Show markets"}</button>`);
+
+  let liveBlock = "";
+  if (live) {
+    const side = lp ? lp.a_side : null;
+    const other = side === "radiant" ? "dire" : side === "dire" ? "radiant" : null;
+    liveBlock = lp ? `<div class="heroes">
+        <div><span class="side ${side}">${side ? side[0].toUpperCase() + side.slice(1) : ""}</span><br>${esc(lp.heroes_a.join(", "))}</div>
+        <div><span class="side ${other}">${other ? other[0].toUpperCase() + other.slice(1) : ""}</span><br>${esc(lp.heroes_b.join(", "))}</div>
+      </div>` : (fx.live ? `<p class="hint">Draft in progress. The map prediction appears once all ten heroes are picked.</p>` : "");
+  }
+
+  return `<article class="match" aria-label="${esc(a)} versus ${esc(b)}">
+    <div class="meta">${meta}</div>
+    <div class="versus">
+      <div class="team a">${esc(a)}${live ? `<small>${fx.score_a} maps</small>` : ""}</div>
+      ${bar}
+      <div class="team b">${esc(b)}${live ? `<small>${fx.score_b} maps</small>` : ""}</div>
+    </div>
+    ${sub.length ? `<div class="sub">${sub.join("")}</div>` : ""}
+    ${liveBlock}
+    ${canExpand && isOpen ? `<div class="markets">${marketsTable(fx)}</div>` : ""}
+  </article>`;
+}
+
+function tierVisible(t) {
+  return state.showLowTiers || !t || MAJOR.has(t) || t === "b" || t === "professional";
+}
+
+/* ---------- views ---------- */
+
+async function viewUpcoming() {
+  const rows = (await api("/api/fixtures?status=upcoming")).filter((f) => tierVisible(f.tier));
+  let html = `<div class="toolbar"><button class="toggle" data-toggle-tiers aria-pressed="${state.showLowTiers}">Show tier C and D</button></div>`;
+  html += alertsBlock();
+  if (!rows.length) return html + `<p class="empty">No upcoming matches in the schedule yet. Matches usually appear a few days before they are played.</p>`;
+  let day = null;
+  for (const fx of rows) {
+    const d = fmtDay(fx.begin_at_utc);
+    if (d !== day) { html += `<h2>${esc(d)}</h2>`; day = d; }
+    html += matchCard(fx);
+  }
+  return html;
+}
+
+async function viewLive() {
+  const rows = await api("/api/fixtures?status=running");
+  if (!rows.length) return `<p class="empty">No matches are being played right now. Live games show up here within two minutes of their lobby starting.</p>`;
+  return rows.map((fx) => matchCard(fx, { live: true })).join("");
+}
+
+async function viewResults() {
+  const rows = await api("/api/fixtures?status=finished");
+  if (!rows.length) return `<p class="empty">No finished matches in the last three days.</p>`;
+  let html = `<p class="lede">Finished in the last three days. The percentage is the prediction locked just before the match started.</p>`;
+  html += `<table><thead><tr><th>Match</th><th class="num">Score</th><th class="num">Locked</th><th>Result</th></tr></thead><tbody>`;
+  for (const fx of rows) {
+    const lk = fx.locked;
+    const res = lk ? (lk.result === "won" ? `<span class="won">Called it</span>` : lk.result === "lost" ? `<span class="lost">Missed</span>` : lk.result === "void" ? "Void" : "Grading") : "Not predicted";
+    html += `<tr><td>${esc(fx.team_a_name)} vs ${esc(fx.team_b_name)}<br><small class="hint">${esc(fx.league_name || "")}, ${fmtDate(fx.begin_at_utc)}</small></td>
+      <td class="num">${fx.score_a}–${fx.score_b}</td><td class="num">${lk ? pct(lk.p_series) : "–"}</td><td>${res}</td></tr>`;
+  }
+  return html + `</tbody></table>`;
+}
+
+async function viewTournaments() {
+  const [running, upcoming] = await Promise.all([api("/api/tournaments?status=running"), api("/api/tournaments?status=upcoming")]);
+  const block = (list) => list.filter((t) => tierVisible(t.tier)).map((t) => {
+    const c = t.counts || {};
+    return `<div class="trow">
+      <div><div class="name">${esc([t.league_name, t.serie_name].filter(Boolean).join(" "))}</div>
+        <div class="meta"><span>${esc(t.stage_name || "")}</span>${tierTag(t.tier)}<span>${fmtDate(t.begin_at_utc)} to ${fmtDate(t.end_at_utc)}</span></div></div>
+      <div></div>
+      <div class="counts"><span><b>${c.total || 0}</b> matches listed</span><span><b>${c.predicted || 0}</b> predicted</span>
+        <span><b>${c.tbd || 0}</b> waiting on teams</span>${c.needs_mapping ? `<span class="flag"><b>${c.needs_mapping}</b> need team mapping</span>` : ""}
+        ${c.running ? `<span><b>${c.running}</b> live</span>` : ""}</div>
+    </div>`;
+  }).join("");
+  let html = `<div class="toolbar"><button class="toggle" data-toggle-tiers aria-pressed="${state.showLowTiers}">Show tier C and D</button></div>`;
+  html += alertsBlock(true);
+  html += `<h2>Running</h2>` + (block(running) || `<p class="empty">No running tournaments in the schedule.</p>`);
+  html += `<h2>Coming up</h2>` + (block(upcoming) || `<p class="empty">No upcoming tournaments listed yet. The schedule usually adds events a few days before their first match.</p>`);
+  return html;
+}
+
+function alertsBlock(all = false) {
+  const alerts = (state.status && state.status.alerts) || [];
+  const shown = all ? alerts : alerts.filter((a) => a.kind !== "schedule_disabled");
+  if (!shown.length) return "";
+  return `<div class="alerts" role="status">${shown.map((a) => `<div class="alert">${esc(a.message)}</div>`).join("")}</div>`;
+}
+
+async function viewRecord() {
+  const r = await api("/api/record");
+  const o = r.overall;
+  if (!o.n) return `<p class="empty">No graded predictions yet. Each match is graded once it finishes, using the prediction locked just before it started.</p>`;
+  const stat = (v, k) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`;
+  let html = `<div class="stats">${stat(o.n, "Matches graded")}${stat(pct(o.accuracy), "Favourite won")}${stat(o.brier.toFixed(3), "Brier score, lower is better")}${stat(o.log_loss.toFixed(3), "Log loss, lower is better")}</div>`;
+  const line = (name, s) => `<tr><td>${name}</td><td class="num">${s.n}</td><td class="num">${s.n ? pct(s.accuracy) : "–"}</td><td class="num">${s.n ? s.brier.toFixed(3) : "–"}</td></tr>`;
+  html += `<h2>By group</h2><table class="split-table"><thead><tr><th></th><th class="num">Matches</th><th class="num">Favourite won</th><th class="num">Brier</th></tr></thead><tbody>
+    ${line("Tier S and A", r.major)}${line("Other tiers", r.other_tiers)}${line("Low data", r.low_data)}</tbody></table>`;
+  html += `<h2>Calibration</h2><div class="calib">${calibration(r.calibration)}<p class="lede">Each dot is a group of predictions. A well calibrated model sits on the diagonal: when it says 70%, the favourite wins about 70% of the time. Bigger dots hold more matches.</p></div>`;
+  html += `<h2>Latest graded</h2><table><thead><tr><th>Match</th><th class="num">Locked</th><th class="num">Score</th><th>Result</th></tr></thead><tbody>`;
+  for (const g of r.recent) {
+    const called = (g.p_team_a >= 0.5) === Boolean(g.realized_outcome);
+    html += `<tr><td>${esc(g.team_a_name)} vs ${esc(g.team_b_name)}<br><small class="hint">${esc(g.league_name || "")}, ${fmtDate(g.begin_at_utc)}</small></td>
+      <td class="num">${pct(g.p_team_a)}</td><td class="num">${g.score_a}–${g.score_b}</td><td class="${called ? "won" : "lost"}">${called ? "Called it" : "Missed"}</td></tr>`;
+  }
+  return html + `</tbody></table>`;
+}
+
+function calibration(buckets) {
+  const S = 300, pad = 36, w = S - pad - 10;
+  const x = (v) => pad + v * w, y = (v) => 10 + (1 - v) * w;
+  const maxN = Math.max(1, ...buckets.map((b) => b.n));
+  let g = `<svg viewBox="0 0 ${S} ${S}" width="100%" role="img" aria-label="Calibration chart of predicted against observed win rate">`;
+  g += `<rect x="${pad}" y="10" width="${w}" height="${w}" fill="none" stroke="var(--line)"/>`;
+  g += `<line x1="${x(0)}" y1="${y(0)}" x2="${x(1)}" y2="${y(1)}" stroke="var(--muted)" stroke-dasharray="4 4"/>`;
+  for (const t of [0, 0.5, 1]) {
+    g += `<text x="${x(t)}" y="${S - 8}" text-anchor="middle">${t * 100}%</text><text x="${pad - 6}" y="${y(t) + 4}" text-anchor="end">${t * 100}%</text>`;
+  }
+  for (const b of buckets) {
+    g += `<circle cx="${x(b.mean_p)}" cy="${y(b.freq)}" r="${4 + 8 * Math.sqrt(b.n / maxN)}" fill="var(--team-a)" fill-opacity=".75"><title>${b.n} matches: predicted ${pct(b.mean_p)}, won ${pct(b.freq)}</title></circle>`;
+  }
+  return g + `</svg>`;
+}
+
+async function viewMapping() {
+  const links = await api("/api/links?unlinked=true");
+  if (!links.length) return `<p class="empty">Every team in the schedule is matched to match history. Nothing to do here.</p>`;
+  let html = `<p class="lede">These schedule names did not match a team in the match history exactly, so their matches get no prediction. Pick the right team, or search by name. Close spellings are only suggestions, because look-alike names are often different teams.</p>`;
+  for (const l of links) {
+    const sugg = l.suggestions.map((s) => `<button class="choice" data-link="${l.ps_team_id}" data-team="${s.team_id}">${esc(s.name)} <span class="hint">${s.games} games</span></button>`).join("");
+    html += `<div class="link"><div class="name">${esc(l.ps_name)}${l.ps_acronym ? ` <span class="hint">${esc(l.ps_acronym)}</span>` : ""}</div>
+      <div class="meta"><span>${l.open_fixtures} open matches</span></div>
+      <div class="choices">${sugg}<input class="search" placeholder="Search teams" aria-label="Search teams for ${esc(l.ps_name)}" data-search="${l.ps_team_id}">
+        <button class="choice" data-link="${l.ps_team_id}" data-team="">Not in history</button></div>
+      <div class="choices" data-results="${l.ps_team_id}"></div></div>`;
+  }
+  return html;
+}
+
+const VIEWS = { upcoming: viewUpcoming, live: viewLive, tournaments: viewTournaments, results: viewResults, record: viewRecord, mapping: viewMapping };
+
+/* ---------- status, rendering, events ---------- */
+
+function renderStatus(s) {
+  const el = $("#status");
+  if (!s || s.phase !== "ready") { el.innerHTML = `<span class="job"><span class="dot"></span>${esc(s ? s.phase : "connecting")}</span>`; return; }
+  const names = { schedule: "Schedule", running: "Live", results: "Results" };
+  el.innerHTML = Object.entries(s.jobs).map(([k, j]) => {
+    const failing = j.last_error_at && (!j.last_ok || j.last_error_at > j.last_ok);
+    const skipped = j.info && j.info.skipped;
+    const cls = failing ? "err" : j.last_ok ? "ok" : "";
+    const title = failing ? j.last_error : skipped ? skipped : "Last run " + ago(j.last_ok);
+    return `<span class="job" title="${esc(title)}"><span class="dot ${cls}"></span>${names[k] || k} ${failing ? "failing" : skipped ? "off" : ago(j.last_ok)}</span>`;
+  }).join("");
+  const live = s.jobs.running && s.jobs.running.info && s.jobs.running.info.live_games;
+  const lc = $("#live-count");
+  lc.hidden = !live; lc.textContent = live || ""; lc.className = "count live";
+}
+
+function notReadyState(d) {
+  const msgs = {
+    starting: ["Starting up", "The server just started."],
+    bootstrapping: ["Filling the database", "First start: loading every pro match since 2022 from OpenDota. This takes about an hour, then predictions start on their own."],
+    loading: ["Rebuilding team ratings", "Replaying match history into the model. This takes under a minute."],
+    failed: ["Startup failed", d && d.error ? d.error : "Check the server logs."],
+  };
+  const [title, text] = msgs[d && d.phase] || ["Not ready", ""];
+  return `<div class="state"><strong>${esc(title)}</strong>${esc(text)}</div>`;
+}
+
+let rendering = false;
+async function render({ force = false } = {}) {
+  if (rendering) return;
+  const main = $("#main");
+  if (!force && main.contains(document.activeElement) && document.activeElement.matches("input")) return;
+  rendering = true;
+  try {
+    state.status = await api("/api/status").catch(() => null);
+    renderStatus(state.status);
+    if (state.status && state.status.phase === "ready") {
+      api("/api/links?unlinked=true").then((l) => { const c = $("#map-count"); c.hidden = !l.length; c.textContent = l.length; }).catch(() => {});
+    }
+    main.innerHTML = await VIEWS[state.tab]();
+  } catch (e) {
+    main.innerHTML = e.notReady ? notReadyState(e.notReady) : `<div class="state"><strong>Could not load this page</strong>${esc(e.message)}. It will retry in 30 seconds.</div>`;
+  } finally {
+    rendering = false;
+  }
+}
+
+function selectTab(tab, focus = false) {
+  state.tab = VIEWS[tab] ? tab : "upcoming";
+  store.set("tab", state.tab);
+  for (const b of document.querySelectorAll("#tabs button")) b.setAttribute("aria-selected", String(b.dataset.tab === state.tab));
+  render({ force: true }).then(() => focus && $("#main").focus());
+}
+
+$("#tabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (b) selectTab(b.dataset.tab); });
+$("#tabs").addEventListener("keydown", (e) => {
+  if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
+  const tabs = [...document.querySelectorAll("#tabs button")];
+  const i = tabs.findIndex((b) => b.dataset.tab === state.tab);
+  const next = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+  next.focus(); selectTab(next.dataset.tab);
+});
+
+$("#main").addEventListener("click", async (e) => {
+  const open = e.target.closest("[data-open]");
+  if (open) {
+    const id = open.dataset.open;
+    state.open.has(id) ? state.open.delete(id) : state.open.add(id);
+    return render({ force: true });
+  }
+  if (e.target.closest("[data-toggle-tiers]")) {
+    state.showLowTiers = !state.showLowTiers;
+    store.set("lowTiers", state.showLowTiers ? "1" : "0");
+    return render({ force: true });
+  }
+  const link = e.target.closest("[data-link]");
+  if (link) {
+    link.disabled = true;
+    try {
+      await api(`/api/links/team/${link.dataset.link}`, { method: "PUT", body: JSON.stringify({ team_id: link.dataset.team ? Number(link.dataset.team) : null }) });
+      render({ force: true });
+    } catch (err) { link.disabled = false; link.textContent = "Could not save: " + err.message; }
+  }
+});
+
+let searchTimer;
+$("#main").addEventListener("input", (e) => {
+  const inp = e.target;
+  if (inp.matches("input.odds")) {
+    store.set(inp.dataset.key, inp.value.trim());
+    const cell = document.querySelector(`[data-edge-for="${CSS.escape(inp.dataset.key)}"]`);
+    if (cell) cell.innerHTML = edgeText(Number(inp.dataset.p), inp.value);
+  }
+  if (inp.matches("input.search")) {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(async () => {
+      const out = document.querySelector(`[data-results="${inp.dataset.search}"]`);
+      if (inp.value.trim().length < 2) { out.innerHTML = ""; return; }
+      const teams = await api("/api/teams/search?q=" + encodeURIComponent(inp.value.trim())).catch(() => []);
+      out.innerHTML = teams.length ? teams.map((t) => `<button class="choice" data-link="${inp.dataset.search}" data-team="${t.team_id}">${esc(t.name)}${t.tag ? " (" + esc(t.tag) + ")" : ""} <span class="hint">${t.games} games, id ${t.team_id}</span></button>`).join("")
+        : `<span class="hint">No team matches that name.</span>`;
+    }, 250);
+  }
+});
+
+selectTab(state.tab);
+setInterval(() => render(), REFRESH_MS);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) render(); });
+</script>
+</body>
+</html>

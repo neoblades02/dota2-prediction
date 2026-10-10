@@ -1,0 +1,58 @@
+# Source policy notes — verify current terms before large backfills.
+# rate_limit values are conservative defaults, not provider guarantees.
+
+opendota:
+  base_url: "https://api.opendota.com/api"
+  policy_notes: >
+    Public API. Verified 2026-10-10 (Phase 0): anonymous limits are ~60
+    requests/minute AND ~3000 requests/day (x-rate-limit-remaining-minute /
+    x-rate-limit-remaining-day headers). The daily cap makes a full detail
+    backfill a multi-day job without an API key; set DOTA_OPENDOTA_API_KEY
+    to raise it. Respect 429s and Retry-After. Match details may be
+    unavailable if replays were never parsed.
+  requires_key: false
+  rate_limit:
+    requests_per_minute: 55
+    max_retries: 6
+    backoff_base_seconds: 1.0
+    backoff_max_seconds: 120.0
+    request_timeout_seconds: 30.0
+
+valve_patches:
+  base_url: "https://www.dota2.com"
+  policy_notes: >
+    Official patch feed at /datafeed/patchnoteslist?language=english —
+    verify availability and terms before bulk collection.
+  requires_key: false
+  rate_limit:
+    requests_per_minute: 20
+    request_timeout_seconds: 30.0
+
+pandascore:
+  base_url: "https://api.pandascore.co"
+  policy_notes: >
+    Schedule source for the dashboard (DOTA_PANDASCORE_API_KEY). Free tier:
+    ~1,000 requests/hour; the service uses ~60. Check the terms of use before
+    any betting-related use.
+  requires_key: true
+  enabled: true
+  rate_limit:
+    requests_per_minute: 30
+    request_timeout_seconds: 30.0
+
+stratz:
+  base_url: "https://api.stratz.com/api/v1"
+  policy_notes: >
+    GraphQL API requiring auth. Check current permissions and limits
+    before bulk collection. Do not enable until credentials are configured.
+  requires_key: true
+  enabled: false
+  rate_limit:
+    requests_per_minute: 20
+    request_timeout_seconds: 30.0
+
+liquipedia:
+  policy_notes: >
+    HTML scraping is prohibited by Liquipedia terms. Approved API access
+    only — apply via liquipedia.net/api. Not implemented until approved.
+  enabled: false

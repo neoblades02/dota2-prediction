@@ -1,0 +1,80 @@
+[
+ {
+  "id": 22039,
+  "name": "Playoffs",
+  "tier": "a",
+  "begin_at": "2026-10-08T09:00:00Z",
+  "end_at": "2026-10-11T18:00:00Z",
+  "league": {
+   "name": "BLAST Slam"
+  },
+  "serie": {
+   "full_name": "Season 8 2026"
+  }
+ },
+ {
+  "id": 22158,
+  "name": "Playoffs",
+  "tier": "d",
+  "begin_at": "2026-10-09T06:00:00Z",
+  "end_at": "2026-10-10T13:00:00Z",
+  "league": {
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "China Open Qualifier 1 season 30 2026"
+  }
+ },
+ {
+  "id": 22159,
+  "name": "Playoffs",
+  "tier": "d",
+  "begin_at": "2026-10-09T08:00:00Z",
+  "end_at": "2026-10-10T11:00:00Z",
+  "league": {
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "Southeast Asia Open Qualifier 1 2026"
+  }
+ },
+ {
+  "id": 22165,
+  "name": "Playoffs",
+  "tier": "d",
+  "begin_at": "2026-10-09T13:00:00Z",
+  "end_at": "2026-10-10T16:00:00Z",
+  "league": {
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "Eastern Europe Open Qualifier 1 season 30 2026"
+  }
+ },
+ {
+  "id": 22166,
+  "name": "Playoffs",
+  "tier": "d",
+  "begin_at": "2026-10-09T14:00:00Z",
+  "end_at": "2026-10-10T17:00:00Z",
+  "league": {
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "Western Europe Open Qualifier 1 season 30 2026"
+  }
+ },
+ {
+  "id": 22167,
+  "name": "Playoffs",
+  "tier": "d",
+  "begin_at": "2026-10-09T23:15:00Z",
+  "end_at": "2026-10-11T00:00:00Z",
+  "league": {
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "South America Open Qualifier 1 season 30 2026"
+  }
+ }
+]

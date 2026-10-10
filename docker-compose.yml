@@ -1,0 +1,18 @@
+# Dokploy: create a "Docker Compose" app from this repo, set the variables below in its
+# Environment tab, then add a domain pointing at service "app", port 8000.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-}
+      DOTA_UI_PASSWORD: ${DOTA_UI_PASSWORD:?Set DOTA_UI_PASSWORD}
+      DOTA_PANDASCORE_API_KEY: ${DOTA_PANDASCORE_API_KEY:-}
+      DOTA_OPENDOTA_API_KEY: ${DOTA_OPENDOTA_API_KEY:-}
+    volumes:
+      - dota-data:/app/data
+    expose:
+      - "8000"
+
+volumes:
+  dota-data:

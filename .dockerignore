@@ -1,0 +1,15 @@
+.git
+.venv
+.env
+.ruff_cache
+.pytest_cache
+.playwright-mcp
+**/__pycache__
+*.pyc
+data
+models
+tests
+docs
+scripts
+notebooks
+catboost_info

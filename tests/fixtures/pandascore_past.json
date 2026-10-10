@@ -1,0 +1,418 @@
+[
+ {
+  "id": 1738320,
+  "name": "Semifinal 2: Zenith vs CR",
+  "status": "finished",
+  "begin_at": "2026-10-10T06:05:20Z",
+  "scheduled_at": "2026-10-10T06:00:00Z",
+  "number_of_games": 3,
+  "match_type": "best_of",
+  "tournament_id": 22158,
+  "league": {
+   "id": 4125,
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "China Open Qualifier 1 season 30 2026"
+  },
+  "tournament": {
+   "id": 22158,
+   "name": "Playoffs",
+   "tier": "d"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 139363,
+     "name": "Zenith",
+     "acronym": null
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 137428,
+     "name": "Cloud Rising",
+     "acronym": "CR"
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 139363,
+    "score": 2
+   },
+   {
+    "team_id": 137428,
+    "score": 0
+   }
+  ],
+  "winner_id": 139363,
+  "forfeit": false
+ },
+ {
+  "id": 1738319,
+  "name": "Semifinal 1: CD vs Cresent",
+  "status": "finished",
+  "begin_at": "2026-10-10T06:05:15Z",
+  "scheduled_at": "2026-10-10T06:00:00Z",
+  "number_of_games": 3,
+  "match_type": "best_of",
+  "tournament_id": 22158,
+  "league": {
+   "id": 4125,
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "China Open Qualifier 1 season 30 2026"
+  },
+  "tournament": {
+   "id": 22158,
+   "name": "Playoffs",
+   "tier": "d"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 137529,
+     "name": "Cloud Dawning",
+     "acronym": "CD"
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 139365,
+     "name": "Cresent",
+     "acronym": null
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 137529,
+    "score": 2
+   },
+   {
+    "team_id": 139365,
+    "score": 0
+   }
+  ],
+  "winner_id": 137529,
+  "forfeit": false
+ },
+ {
+  "id": 1740306,
+  "name": "Quarterfinal 2: New Growth vs CDUB",
+  "status": "finished",
+  "begin_at": "2026-10-10T00:15:00Z",
+  "scheduled_at": "2026-10-10T00:15:00Z",
+  "number_of_games": 1,
+  "match_type": "best_of",
+  "tournament_id": 22167,
+  "league": {
+   "id": 4125,
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "South America Open Qualifier 1 season 30 2026"
+  },
+  "tournament": {
+   "id": 22167,
+   "name": "Playoffs",
+   "tier": "d"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 137905,
+     "name": "New Growth",
+     "acronym": null
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 131370,
+     "name": "CDUB Esports",
+     "acronym": "CDUB"
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 137905,
+    "score": 1
+   },
+   {
+    "team_id": 131370,
+    "score": 0
+   }
+  ],
+  "winner_id": 137905,
+  "forfeit": false
+ },
+ {
+  "id": 1740308,
+  "name": "Quarterfinal 4: RL vs Pizza Hook",
+  "status": "finished",
+  "begin_at": "2026-10-09T23:35:00Z",
+  "scheduled_at": "2026-10-09T23:35:00Z",
+  "number_of_games": 1,
+  "match_type": "best_of",
+  "tournament_id": 22167,
+  "league": {
+   "id": 4125,
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "South America Open Qualifier 1 season 30 2026"
+  },
+  "tournament": {
+   "id": 22167,
+   "name": "Playoffs",
+   "tier": "d"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 137808,
+     "name": "Rottweilas Latam",
+     "acronym": "RL"
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 139396,
+     "name": "Pizza Hook",
+     "acronym": null
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 137808,
+    "score": 1
+   },
+   {
+    "team_id": 139396,
+    "score": 0
+   }
+  ],
+  "winner_id": 137808,
+  "forfeit": false
+ },
+ {
+  "id": 1740305,
+  "name": "Quarterfinal 1: HKR vs proplayers 8k",
+  "status": "finished",
+  "begin_at": "2026-10-09T23:20:00Z",
+  "scheduled_at": "2026-10-09T23:20:00Z",
+  "number_of_games": 1,
+  "match_type": "best_of",
+  "tournament_id": 22167,
+  "league": {
+   "id": 4125,
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "South America Open Qualifier 1 season 30 2026"
+  },
+  "tournament": {
+   "id": 22167,
+   "name": "Playoffs",
+   "tier": "d"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 127965,
+     "name": "Hokori",
+     "acronym": "HKR"
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 136018,
+     "name": "proplayers 8k",
+     "acronym": null
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 127965,
+    "score": 1
+   },
+   {
+    "team_id": 136018,
+    "score": 0
+   }
+  ],
+  "winner_id": 127965,
+  "forfeit": false
+ },
+ {
+  "id": 1740307,
+  "name": "Quarterfinal 3: Skyreavers vs Condor Esports",
+  "status": "finished",
+  "begin_at": "2026-10-09T23:15:00Z",
+  "scheduled_at": "2026-10-09T23:15:00Z",
+  "number_of_games": 1,
+  "match_type": "best_of",
+  "tournament_id": 22167,
+  "league": {
+   "id": 4125,
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "South America Open Qualifier 1 season 30 2026"
+  },
+  "tournament": {
+   "id": 22167,
+   "name": "Playoffs",
+   "tier": "d"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 139394,
+     "name": "Skyreavers",
+     "acronym": null
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 139395,
+     "name": "Condor Esports",
+     "acronym": null
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 139394,
+    "score": 1
+   },
+   {
+    "team_id": 139395,
+    "score": 0
+   }
+  ],
+  "winner_id": 139394,
+  "forfeit": false
+ },
+ {
+  "id": 1709127,
+  "name": "Lower Bracket Quarterfinal 1: LGD vs AUR",
+  "status": "finished",
+  "begin_at": "2026-10-09T18:27:23Z",
+  "scheduled_at": "2026-10-09T18:30:00Z",
+  "number_of_games": 3,
+  "match_type": "best_of",
+  "tournament_id": 22039,
+  "league": {
+   "id": 5319,
+   "name": "BLAST Slam"
+  },
+  "serie": {
+   "full_name": "Season 8 2026"
+  },
+  "tournament": {
+   "id": 22039,
+   "name": "Playoffs",
+   "tier": "a"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 1657,
+     "name": "LGD Gaming",
+     "acronym": "LGD"
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 133882,
+     "name": "Aurora",
+     "acronym": "AUR"
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 1657,
+    "score": 0
+   },
+   {
+    "team_id": 133882,
+    "score": 2
+   }
+  ],
+  "winner_id": 133882,
+  "forfeit": false
+ },
+ {
+  "id": 1739610,
+  "name": "Semifinal 1: Z10 vs The Warriors",
+  "status": "finished",
+  "begin_at": "2026-10-09T16:30:07Z",
+  "scheduled_at": "2026-10-09T16:25:00Z",
+  "number_of_games": 3,
+  "match_type": "best_of",
+  "tournament_id": 22165,
+  "league": {
+   "id": 4125,
+   "name": "DreamLeague"
+  },
+  "serie": {
+   "full_name": "Eastern Europe Open Qualifier 1 season 30 2026"
+  },
+  "tournament": {
+   "id": 22165,
+   "name": "Playoffs",
+   "tier": "d"
+  },
+  "opponents": [
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 135854,
+     "name": "Zero Tenacity",
+     "acronym": "Z10"
+    }
+   },
+   {
+    "type": "Team",
+    "opponent": {
+     "id": 139378,
+     "name": "The Warriors",
+     "acronym": null
+    }
+   }
+  ],
+  "results": [
+   {
+    "team_id": 135854,
+    "score": 1
+   },
+   {
+    "team_id": 139378,
+    "score": 2
+   }
+  ],
+  "winner_id": 139378,
+  "forfeit": false
+ }
+]
