@@ -9,6 +9,7 @@ data/processed/**
 data/features/**
 data/reports/**
 models/**
+!models/lightgbm_*.joblib
 !data/**/.gitkeep
 !models/.gitkeep
 notebooks/.ipynb_checkpoints/

@@ -92,17 +92,9 @@ The repository ships a `Dockerfile` and a `docker-compose.yml`.
 2. In its **Environment** tab, set `DOTA_UI_PASSWORD`, `DATABASE_URL` and `DOTA_PANDASCORE_API_KEY`.
 3. Under **Domains**, point a domain at service `app`, port `8000`.
 4. Deploy. On an empty database, the first start fills it from OpenDota, which takes about an hour. The page shows the progress, and predictions start on their own afterwards.
-5. Copy your two trained model files to the server, put them on the data volume, then restart the app:
+The two trained model files in `models/` are committed and built into the image, so every deploy carries the model you trained. After a retrain on your machine, commit the new `.joblib` files and push; Dokploy rebuilds. If the files are missing, predictions fall back to team Elo ratings and `/api/status` reports `"model_version": "elo_only"`.
 
-   ```bash
-   scp models/*.joblib you@server:/tmp/                           # from your machine
-   docker cp /tmp/lightgbm_predraft_v1.joblib <container>:/app/data/models/   # on the server
-   docker cp /tmp/lightgbm_pregame_v1.joblib <container>:/app/data/models/
-   ```
-
-   Until the models are there, predictions fall back to team Elo ratings.
-
-After each retrain on your machine, repeat step 5. Keep the server on the same code version you trained with, because a model file expects the exact feature list its code produces.
+Keep the server on the same code version you trained with, because a model file expects the exact feature list its code produces.
 
 Sizing: Dokploy itself asks for 2 GB of RAM. This app needs about 700 MB more, so 4 GB is comfortable. Run exactly one replica: the job loops and the in-memory state are not meant to be shared.
 

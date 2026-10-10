@@ -14,11 +14,12 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY config ./config
 COPY src ./src
+COPY models ./models
 # Editable install keeps the project root at /app, where config/ and data/ live.
-RUN pip install -e . && useradd --create-home --uid 1000 app && mkdir -p /app/data/models && chown -R app /app/data
+RUN pip install -e . && useradd --create-home --uid 1000 app && mkdir -p /app/data && chown -R app /app/data
 
-# Database, trained models and raw payloads all live on the /app/data volume.
-ENV DOTA_MODELS_DIR=/app/data/models \
+# Trained models ship inside the image (train locally, commit, push); raw payloads live on the /app/data volume.
+ENV DOTA_MODELS_DIR=/app/models \
     DOTA_RAW_STORE_DIR=/app/data/raw
 
 USER app
