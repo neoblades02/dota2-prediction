@@ -29,6 +29,7 @@ from dota_predictor.predict.markets import fair_odds, market_rows
 from dota_predictor.service.jobs import INTERVALS, JobRunner
 from dota_predictor.settings import get_settings
 from dota_predictor.storage.models import (
+    fixture_odds,
     fixtures,
     prediction_results,
     predictions,
@@ -36,6 +37,7 @@ from dota_predictor.storage.models import (
     team_links,
     teams,
 )
+from dota_predictor.storage.upsert import dialect_insert
 
 logger = get_logger("service.app")
 
@@ -57,6 +59,11 @@ def _out(obj: Any) -> Any:
 
 class LinkBody(BaseModel):
     team_id: int | None
+
+
+class OddsBody(BaseModel):
+    odds_a: float | None = None
+    odds_b: float | None = None
 
 
 class State:
@@ -198,6 +205,12 @@ def create_app(
             q = q.where(fixtures.c.tournament_key == tournament)
         with engine.connect() as conn:
             rows = [dict(r) for r in conn.execute(q.limit(200)).mappings()]
+            book = {
+                r.fixture_id: {"a": r.odds_a, "b": r.odds_b}
+                for r in conn.execute(
+                    select(fixture_odds).where(fixture_odds.c.fixture_id.in_([r["fixture_id"] for r in rows]))
+                )
+            }
             locked = {}
             if status == "finished" and rows:
                 locked = {
@@ -218,8 +231,29 @@ def create_app(
             view = _fixture_view(runner, fx, with_prediction=status != "finished")
             if fx["fixture_id"] in locked:
                 view["locked"] = locked[fx["fixture_id"]]
+            view["book_odds"] = book.get(fx["fixture_id"])
             out.append(view)
         return _out(out)
+
+    @app.put("/api/fixtures/{fixture_id}/odds", dependencies=[Depends(auth)])
+    def put_odds(fixture_id: str, body: OddsBody) -> dict[str, Any]:
+        """Save the bookmaker's match-winner prices. A side left out keeps its value; 0 or null clears it."""
+        ready()
+        given = {k: v for k, v in body.model_dump().items() if k in body.model_fields_set}
+        if any(v is not None and 0 < v <= 1 for v in given.values()):
+            raise HTTPException(422, "Decimal odds must be greater than 1")
+        given = {k: (v if v else None) for k, v in given.items()}
+        with engine.begin() as conn:
+            if conn.execute(select(fixtures.c.fixture_id).where(fixtures.c.fixture_id == fixture_id)).first() is None:
+                raise HTTPException(404, "No such fixture")
+            now = datetime.now(UTC)
+            conn.execute(
+                dialect_insert(conn, fixture_odds)
+                .values(fixture_id=fixture_id, updated_at_utc=now, **given)
+                .on_conflict_do_update(index_elements=["fixture_id"], set_={"updated_at_utc": now, **given})
+            )
+            row = conn.execute(select(fixture_odds).where(fixture_odds.c.fixture_id == fixture_id)).mappings().one()
+        return _out(dict(row))
 
     @app.get("/api/fixtures/{fixture_id}", dependencies=[Depends(auth)])
     def get_fixture(fixture_id: str) -> dict[str, Any]:

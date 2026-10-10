@@ -246,14 +246,16 @@ function marketsTable(fx) {
     html += `<tr class="group"><td colspan="5">${esc(r.label.replace(/:$/, ""))}</td></tr>`;
     for (const o of r.outcomes) {
       const key = `odds:${fx.fixture_id}|${r.label}|${o.name}`;
-      const saved = store.get(key, "");
-      html += `<tr><td>${esc(o.name)}</td><td class="num">${pct(o.p)}</td><td class="num">${isFinite(o.odds) ? o.odds.toFixed(2) : "–"}</td>
+      // Match-winner prices are saved on the server so the track record can score the bookmaker too
+      const side = r.label === "Match winner:" ? (o.name === fx.team_a_name ? "a" : o.name === fx.team_b_name ? "b" : "") : "";
+      const saved = (side && fx.book_odds && fx.book_odds[side]) || store.get(key, "");
+      html += `<tr><td>${esc(o.name)}</td><td class="num">${pct(o.p)}</td><td class="num">${Number.isFinite(o.odds) ? o.odds.toFixed(2) : "–"}</td>
         <td class="num"><input class="odds" inputmode="decimal" aria-label="Bookmaker odds for ${esc(o.name)}, ${esc(r.label)}"
-          data-key="${esc(key)}" data-p="${o.p}" value="${esc(saved)}"></td>
+          data-key="${esc(key)}" data-p="${o.p}" data-fixture="${esc(fx.fixture_id)}" data-side="${side}" value="${esc(saved)}"></td>
         <td class="num edge" data-edge-for="${esc(key)}">${edgeText(o.p, saved)}</td></tr>`;
     }
   }
-  return html + `</tbody></table><p class="hint">Edge is model probability times bookmaker odds, minus one. Positive means the price is better than the model's fair odds. Odds you type stay in this browser only.</p>`;
+  return html + `</tbody></table><p class="hint">Edge is model probability times bookmaker odds, minus one. Positive means the price is better than the model's fair odds. Match-winner odds are saved and scored on the Track record tab; other prices stay in this browser.</p>`;
 }
 
 function edgeText(p, oddsStr) {
@@ -393,6 +395,13 @@ async function viewRecord() {
   const line = (name, s) => `<tr><td>${name}</td><td class="num">${s.n}</td><td class="num">${s.n ? pct(s.accuracy) : "–"}</td><td class="num">${s.n ? s.brier.toFixed(3) : "–"}</td></tr>`;
   html += `<h2>By group</h2><table class="split-table"><thead><tr><th></th><th class="num">Matches</th><th class="num">Favourite won</th><th class="num">Brier</th></tr></thead><tbody>
     ${line("Tier S and A", r.major)}${line("Other tiers", r.other_tiers)}${line("Low data", r.low_data)}</tbody></table>`;
+  const vs = (title, a, b, hint) => `<h2>${title}</h2>` + (a[1].n
+    ? `<table class="split-table"><thead><tr><th></th><th class="num">Matches</th><th class="num">Favourite won</th><th class="num">Brier</th></tr></thead><tbody>${line(...a)}${line(...b)}</tbody></table>`
+    : `<p class="hint">${hint}</p>`);
+  html += vs("Model against the bookmaker", ["Model", r.book.model], ["Bookmaker, vig removed", r.book.book],
+    "Type both match-winner odds on an upcoming match and it is scored here once the match is graded.");
+  html += vs("Before and after the draft", ["Before the draft", r.draft.pre_draft], ["After the draft", r.draft.post_draft],
+    "Each live map is scored once its result is in, with the probability before the draft and after all ten picks.");
   html += `<h2>Calibration</h2><div class="calib">${calibration(r.calibration)}<p class="lede">Each dot is a group of predictions. A well calibrated model sits on the diagonal: when it says 70%, the favourite wins about 70% of the time. Bigger dots hold more matches.</p></div>`;
   html += `<h2>Latest graded</h2><table><thead><tr><th>Match</th><th class="num">Locked</th><th class="num">Score</th><th>Result</th></tr></thead><tbody>`;
   for (const g of r.recent) {
@@ -524,12 +533,20 @@ $("#main").addEventListener("click", async (e) => {
 });
 
 let searchTimer;
+const oddsTimers = {};
 $("#main").addEventListener("input", (e) => {
   const inp = e.target;
   if (inp.matches("input.odds")) {
     store.set(inp.dataset.key, inp.value.trim());
     const cell = document.querySelector(`[data-edge-for="${CSS.escape(inp.dataset.key)}"]`);
     if (cell) cell.innerHTML = edgeText(Number(inp.dataset.p), inp.value);
+    if (inp.dataset.side) {
+      clearTimeout(oddsTimers[inp.dataset.key]);
+      oddsTimers[inp.dataset.key] = setTimeout(() => {
+        const v = parseFloat(inp.value.replace(",", "."));
+        api(`/api/fixtures/${encodeURIComponent(inp.dataset.fixture)}/odds`, { method: "PUT", body: JSON.stringify({ [`odds_${inp.dataset.side}`]: v > 1 ? v : 0 }) }).catch(() => {});
+      }, 600);
+    }
   }
   if (inp.matches("input.search")) {
     clearTimeout(searchTimer);

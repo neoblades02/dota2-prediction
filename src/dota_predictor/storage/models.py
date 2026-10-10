@@ -326,6 +326,15 @@ feature_snapshots = Table(
     UniqueConstraint("target_type", "target_id", "cutoff_at_utc", "feature_version", name="uq_feature"),
 )
 
+fixture_odds = Table(
+    "fixture_odds",
+    metadata,
+    Column("fixture_id", Text, primary_key=True),
+    Column("odds_a", Float),  # bookmaker decimal odds on team A winning the series
+    Column("odds_b", Float),
+    Column("updated_at_utc", DateTime(timezone=True), nullable=False),
+)
+
 predictions = Table(
     "predictions",
     metadata,

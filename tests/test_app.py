@@ -213,3 +213,15 @@ def test_failed_startup_retries_until_it_succeeds(tmp_path, monkeypatch):
             time.sleep(0.05)
         assert c.get("/healthz").json() == {"ok": True, "phase": "ready"}
     assert len(calls) == 2
+
+
+def test_bookmaker_odds_are_saved_per_side_and_shown_on_fixtures(client):
+    assert client.put("/api/fixtures/ps:404/odds", json={"odds_a": 1.8}, auth=AUTH).status_code == 404
+    assert client.put("/api/fixtures/ps:10/odds", json={"odds_a": 0.9}, auth=AUTH).status_code == 422
+    assert client.put("/api/fixtures/ps:10/odds", json={"odds_a": 1.8}, auth=AUTH).json()["odds_b"] is None
+    saved = client.put("/api/fixtures/ps:10/odds", json={"odds_b": 2.1}, auth=AUTH).json()
+    assert (saved["odds_a"], saved["odds_b"]) == (1.8, 2.1)  # a side left out keeps its price
+    assert client.put("/api/fixtures/ps:10/odds", json={"odds_a": 0}, auth=AUTH).json()["odds_a"] is None  # 0 clears
+    by_id = {f["fixture_id"]: f for f in client.get("/api/fixtures?status=upcoming", auth=AUTH).json()}
+    assert by_id["ps:10"]["book_odds"] == {"a": None, "b": 2.1}
+    assert by_id["ps:11"]["book_odds"] is None

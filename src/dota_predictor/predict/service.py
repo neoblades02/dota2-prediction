@@ -22,7 +22,7 @@ from dota_predictor.logging_config import get_logger
 from dota_predictor.predict.live_draft import LiveDraftPredictor
 from dota_predictor.predict.markets import FORMATS, series_markets
 from dota_predictor.settings import get_settings
-from dota_predictor.storage.models import fixtures, prediction_results, predictions
+from dota_predictor.storage.models import fixture_odds, fixtures, games, prediction_results, predictions
 from dota_predictor.storage.upsert import dialect_insert
 
 logger = get_logger("predict.service")
@@ -194,7 +194,36 @@ class PredictionService:
                     settled_source=source,
                 )
             )
-        return len(rows)
+        return len(rows) + self._grade_draft_maps(conn, now)
+
+    def _grade_draft_maps(self, conn: Connection, now: datetime) -> int:
+        """Settle post-draft map predictions once OpenDota has the map's result. Outcome is per map, not series."""
+        rows = conn.execute(
+            select(predictions.c.prediction_id, predictions.c.payload_json)
+            .outerjoin(prediction_results, prediction_results.c.prediction_id == predictions.c.prediction_id)
+            .where(predictions.c.prediction_type == "live_draft", prediction_results.c.id.is_(None))
+        ).all()
+        n = 0
+        for pid, payload_json in rows:
+            payload = json.loads(payload_json or "{}")
+            if not (mid := payload.get("match_id")):
+                continue
+            radiant_win = conn.execute(select(games.c.radiant_win).where(games.c.valve_match_id == mid)).scalar()
+            if radiant_win is None:
+                continue
+            outcome = int(radiant_win == (payload.get("a_side") == "radiant"))
+            won = (payload.get("p_map_now", 0.5) >= 0.5) == bool(outcome)
+            conn.execute(
+                prediction_results.insert().values(
+                    prediction_id=pid,
+                    result_status="won" if won else "lost",
+                    realized_outcome=outcome,
+                    evaluated_at_utc=now,
+                    settled_source="opendota",
+                )
+            )
+            n += 1
+        return n
 
     def record(self, conn: Connection, recent: int = 50) -> dict[str, Any]:
         """Accuracy, Brier, log loss and calibration of graded locked predictions."""
@@ -223,17 +252,50 @@ class PredictionService:
             .all()
         )
 
-        def summary(sub: list[Mapping[str, Any]]) -> dict[str, Any]:
-            if not sub:
+        def score(ps: list[float], ys: list[int]) -> dict[str, Any]:
+            if not ps:
                 return {"n": 0}
-            ps = [min(max(r["p_team_a"], 1e-6), 1 - 1e-6) for r in sub]
-            ys = [r["realized_outcome"] for r in sub]
+            ps = [min(max(p, 1e-6), 1 - 1e-6) for p in ps]
             return {
-                "n": len(sub),
-                "accuracy": sum((p >= 0.5) == bool(y) for p, y in zip(ps, ys, strict=True)) / len(sub),
-                "brier": sum((p - y) ** 2 for p, y in zip(ps, ys, strict=True)) / len(sub),
-                "log_loss": -sum(math.log(p if y else 1 - p) for p, y in zip(ps, ys, strict=True)) / len(sub),
+                "n": len(ps),
+                "accuracy": sum((p >= 0.5) == bool(y) for p, y in zip(ps, ys, strict=True)) / len(ps),
+                "brier": sum((p - y) ** 2 for p, y in zip(ps, ys, strict=True)) / len(ps),
+                "log_loss": -sum(math.log(p if y else 1 - p) for p, y in zip(ps, ys, strict=True)) / len(ps),
             }
+
+        def summary(sub: list[Mapping[str, Any]]) -> dict[str, Any]:
+            return score([r["p_team_a"] for r in sub], [r["realized_outcome"] for r in sub])
+
+        # Bookmaker comparison on the matches that have both match-winner prices typed in (vig removed)
+        odds = {
+            r.fixture_id: (r.odds_a, r.odds_b)
+            for r in conn.execute(select(fixture_odds).where(fixture_odds.c.odds_a > 1, fixture_odds.c.odds_b > 1))
+        }
+        priced = [r for r in rows if r["fixture_id"] in odds]
+        book_ps = [
+            (1 / odds[r["fixture_id"]][0]) / (1 / odds[r["fixture_id"]][0] + 1 / odds[r["fixture_id"]][1])
+            for r in priced
+        ]
+        ys = [r["realized_outcome"] for r in priced]
+        book = {"n": len(priced), "model": summary(priced), "book": score(book_ps, ys)}
+
+        # Same maps, before and after the draft: does the post-draft model add anything?
+        drafts = [
+            (json.loads(pj or "{}"), y)
+            for pj, y in conn.execute(
+                select(predictions.c.payload_json, prediction_results.c.realized_outcome)
+                .join(prediction_results, prediction_results.c.prediction_id == predictions.c.prediction_id)
+                .where(
+                    predictions.c.prediction_type == "live_draft", prediction_results.c.realized_outcome.is_not(None)
+                )
+            )
+        ]
+        dys = [y for _, y in drafts]
+        draft = {
+            "n": len(drafts),
+            "pre_draft": score([p["p_map"] for p, _ in drafts], dys),
+            "post_draft": score([p["p_map_now"] for p, _ in drafts], dys),
+        }
 
         buckets = []
         for i in range(10):
@@ -254,6 +316,8 @@ class PredictionService:
             "major": summary([r for r in rows if r["tier"] in MAJOR_TIERS]),
             "other_tiers": summary([r for r in rows if r["tier"] not in MAJOR_TIERS]),
             "low_data": summary([r for r in rows if r["roster_confidence"] == "low_data"]),
+            "book": book,
+            "draft": draft,
             "calibration": buckets,
             "recent": [dict(r) for r in rows[:recent]],
         }

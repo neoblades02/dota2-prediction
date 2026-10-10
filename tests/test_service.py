@@ -140,3 +140,24 @@ def test_unknown_lineup_falls_back_to_elo_instead_of_extrapolating(service, monk
     assert unknown["p_radiant"] == pytest.approx(unknown["pre_draft_radiant_win_pct"] / 100, abs=0.001)
     pred = service.predict_fixture(_fx(team_a_id=99))
     assert pred["low_data"] is True and 0.2 < pred["p_map"] < 0.8
+
+
+def test_record_scores_bookmaker_and_draft_maps(service):
+    from dota_predictor.storage.models import fixture_odds
+
+    with service.engine.begin() as conn:
+        conn.execute(insert(fixtures), [_fx(fixture_id="ps:1", status="finished", winner="a")])
+        conn.execute(insert(fixture_odds).values(fixture_id="ps:1", odds_a=1.5, odds_b=2.5, updated_at_utc=NOW))
+        service.log(conn, _fx(), "locked", {"p_series": 0.7, "p_map": 0.6})
+        # map 1 of the series was OpenDota match 70001: radiant (team 1 = team A) won
+        draft = {"p_series": 0.75, "p_map": 0.6, "p_map_now": 0.8, "a_side": "radiant", "match_id": 70001}
+        service.log(conn, _fx(), "live_draft", draft, 1)
+        service.log(conn, _fx(), "live_draft", draft | {"match_id": 999999}, 2)  # result not known yet
+        assert service.grade(conn) == 2  # the locked series row and map 1
+        rec = service.record(conn)
+    assert rec["book"]["n"] == 1
+    assert rec["book"]["model"]["brier"] == pytest.approx(0.3**2)
+    assert rec["book"]["book"]["brier"] == pytest.approx((1 - 0.625) ** 2)  # (1/1.5) / (1/1.5 + 1/2.5)
+    assert rec["draft"]["n"] == 1
+    assert rec["draft"]["pre_draft"]["brier"] == pytest.approx(0.4**2)
+    assert rec["draft"]["post_draft"]["brier"] == pytest.approx(0.2**2)
