@@ -183,3 +183,33 @@ def test_fixture_with_a_live_game_moves_from_upcoming_to_live(client):
     live = [r["fixture_id"] for r in client.get("/api/fixtures?status=running", auth=AUTH).json()]
     upcoming = [r["fixture_id"] for r in client.get("/api/fixtures?status=upcoming", auth=AUTH).json()]
     assert live == ["ps:10"] and "ps:10" not in upcoming
+
+
+def test_failed_startup_retries_until_it_succeeds(tmp_path, monkeypatch):
+    import time
+
+    import dota_predictor.service.app as app_mod
+
+    engine = create_engine(f"sqlite:///{(tmp_path / 'b.db').as_posix()}", connect_args={"check_same_thread": False})
+    calls = []
+
+    def flaky_boot(state):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("OpenDota explorer HTTP 400: Error: Query read timeout")
+        state.runner = JobRunner(engine, None, live_fetch=list, schedule_enabled=False)
+
+    async def no_loop(self, name, start_delay=0):
+        return None
+
+    monkeypatch.setattr(app_mod, "_boot", flaky_boot)
+    monkeypatch.setattr(app_mod, "BOOT_RETRY_SECONDS", 0.05)
+    monkeypatch.setattr(JobRunner, "loop", no_loop)
+    app = create_app(engine=engine, password="pw", start_background=True)
+    with TestClient(app) as c:
+        for _ in range(100):
+            if c.get("/healthz").json()["phase"] == "ready":
+                break
+            time.sleep(0.05)
+        assert c.get("/healthz").json() == {"ok": True, "phase": "ready"}
+    assert len(calls) == 2

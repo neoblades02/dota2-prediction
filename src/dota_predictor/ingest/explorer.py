@@ -27,13 +27,45 @@ BASE_URL = "https://api.opendota.com/api"
 DEFAULT_TIERS = ("premium", "professional")
 
 
+MIN_PAGE = 250  # below this a timeout is not about query size any more
+MIN_ID_CHUNK = 50
+
+
+class ExplorerError(RuntimeError):
+    """OpenDota rejected an explorer query; the message carries OpenDota's own reason."""
+
+
+class ExplorerTimeout(ExplorerError):
+    """The query ran past OpenDota's ~15 s limit (HTTP 400 "Query read timeout"); a smaller one usually passes."""
+
+
 def _query(client: RateLimitedClient, sql: str) -> list[dict[str, Any]]:
     resp = client.get("/explorer", params={"sql": sql})
-    resp.raise_for_status()
-    body = resp.json()
-    if body.get("err"):
-        raise RuntimeError(f"explorer query failed: {body['err']}")
+    try:
+        body = resp.json()
+    except ValueError:
+        body = {}
+    reason = (body.get("err") or body.get("error")) if isinstance(body, dict) else None
+    if resp.status_code != 200 or reason:
+        msg = f"OpenDota explorer HTTP {resp.status_code}: {reason or resp.text[:200]}"
+        raise (ExplorerTimeout if "timeout" in str(reason).lower() else ExplorerError)(msg)
     return body.get("rows") or []
+
+
+def _player_rows(client: RateLimitedClient, ids: list[int]) -> list[dict[str, Any]]:
+    """Hero/player slots for these matches, splitting the id list whenever OpenDota times out."""
+    try:
+        return _query(
+            client,
+            "SELECT match_id, account_id, hero_id, player_slot FROM player_matches "
+            f"WHERE match_id IN ({','.join(map(str, ids))}) ORDER BY match_id, player_slot",
+        )
+    except ExplorerTimeout:
+        if len(ids) <= MIN_ID_CHUNK:
+            raise
+        half = len(ids) // 2
+        logger.warning("Explorer player query timed out; splitting", ids=len(ids))
+        return _player_rows(client, ids[:half]) + _player_rows(client, ids[half:])
 
 
 def _epoch(dt: datetime) -> int:
@@ -46,7 +78,7 @@ def sync_explorer_match_index(
     engine: Engine,
     tiers: tuple[str, ...] = DEFAULT_TIERS,
     since_utc: datetime = datetime(2022, 1, 1, tzinfo=UTC),
-    page_size: int = 10000,
+    page_size: int = 2000,  # 10,000-row pages run close to OpenDota's ~15 s query limit
 ) -> dict[str, Any]:
     """Page every league match of the given tiers into pro_match_index (status pending)."""
     client = RateLimitedClient(provider=PROVIDER, base_url=BASE_URL)
@@ -64,7 +96,14 @@ def sync_explorer_match_index(
                 "AND m.radiant_team_id IS NOT NULL AND m.dire_team_id IS NOT NULL AND m.radiant_win IS NOT NULL "
                 f"ORDER BY m.match_id LIMIT {page_size}"
             )
-            rows = _query(client, sql)
+            try:
+                rows = _query(client, sql)
+            except ExplorerTimeout:
+                if page_size <= MIN_PAGE:
+                    raise
+                page_size //= 2
+                logger.warning("Explorer page timed out; retrying smaller", page_size=page_size, cursor=cursor)
+                continue
             if not rows:
                 break
             now = datetime.now(UTC)
@@ -135,11 +174,7 @@ def sync_explorer_player_matches(
         for i in range(0, len(pending), batch_size):
             chunk = pending[i : i + batch_size]
             ids = [r["match_id"] for r in chunk]
-            rows = _query(
-                client,
-                "SELECT match_id, account_id, hero_id, player_slot FROM player_matches "
-                f"WHERE match_id IN ({','.join(map(str, ids))}) ORDER BY match_id, player_slot",
-            )
+            rows = _player_rows(client, ids)
             by_match: dict[int, list[dict[str, Any]]] = {}
             for r in rows:
                 by_match.setdefault(r["match_id"], []).append(r)

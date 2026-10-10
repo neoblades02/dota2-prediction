@@ -459,7 +459,7 @@ function notReadyState(d) {
     starting: ["Starting up", "The server just started."],
     bootstrapping: ["Filling the database", "First start: loading every pro match since 2022 from OpenDota. This takes about an hour, then predictions start on their own."],
     loading: ["Rebuilding team ratings", "Replaying match history into the model. This takes under a minute."],
-    failed: ["Startup failed", d && d.error ? d.error : "Check the server logs."],
+    failed: ["Startup hit an error", (d && d.error ? d.error + ". " : "") + "It retries on its own every 5 minutes and picks up where it stopped."],
   };
   const [title, text] = msgs[d && d.phase] || ["Not ready", ""];
   return `<div class="state"><strong>${esc(title)}</strong>${esc(text)}</div>`;

@@ -41,6 +41,7 @@ logger = get_logger("service.app")
 
 STATIC = Path(__file__).parent / "static"
 FINISHED_WINDOW = timedelta(days=3)
+BOOT_RETRY_SECONDS = 300  # a failed first fill (OpenDota hiccup) retries on its own; finished steps are idempotent
 
 
 def _out(obj: Any) -> Any:
@@ -102,19 +103,22 @@ def create_app(
             await asyncio.to_thread(init_db, engine)
 
             async def boot() -> None:
-                try:
-                    if state.runner is None:
-                        await asyncio.to_thread(_boot, state)
-                    # Schedule first, so live games attach to scheduled matches instead of becoming duplicates.
-                    await asyncio.to_thread(state.runner.run, "schedule")
-                    state.phase = "ready"
-                    state.tasks += [
-                        asyncio.create_task(state.runner.loop(name, INTERVALS[name] if name == "schedule" else 0))
-                        for name in INTERVALS
-                    ]
-                except Exception as e:  # noqa: BLE001 - surface on the page instead of crashing the server
-                    logger.exception("Startup failed")
-                    state.phase, state.error = "failed", f"{type(e).__name__}: {e}"
+                while True:
+                    try:
+                        if state.runner is None:
+                            await asyncio.to_thread(_boot, state)
+                        # Schedule first, so live games attach to scheduled matches instead of becoming duplicates.
+                        await asyncio.to_thread(state.runner.run, "schedule")
+                        state.phase, state.error = "ready", None
+                        state.tasks += [
+                            asyncio.create_task(state.runner.loop(name, INTERVALS[name] if name == "schedule" else 0))
+                            for name in INTERVALS
+                        ]
+                        return
+                    except Exception as e:  # noqa: BLE001 - shown on the page; the bootstrap resumes on retry
+                        logger.exception("Startup failed; retrying", retry_in_s=BOOT_RETRY_SECONDS)
+                        state.phase, state.error = "failed", f"{type(e).__name__}: {e}"
+                        await asyncio.sleep(BOOT_RETRY_SECONDS)
 
             state.tasks.append(asyncio.create_task(boot()))
         yield
