@@ -122,6 +122,8 @@ input.odds {
 .trow .counts { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 13px; grid-column: 1 / -1; }
 .trow .counts b { color: var(--text); }
 
+.job-error { flex-basis: 100%; margin-top: 4px; word-break: break-word; }
+
 /* Record */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
@@ -458,6 +460,9 @@ function renderStatus(s) {
     const title = failing ? j.last_error : skipped ? skipped : "Last run " + ago(j.last_ok);
     return `<span class="job" title="${esc(title)}"><span class="dot ${cls}"></span>${names[k] || k} ${failing ? "failing" : skipped ? "off" : ago(j.last_ok)}</span>`;
   }).join("");
+  // tooltips are unreachable on phones: spell out a failing job's error under the status line
+  const errs = Object.entries(s.jobs).filter(([, j]) => j.last_error_at && (!j.last_ok || j.last_error_at > j.last_ok));
+  if (errs.length) el.innerHTML += `<div class="hint job-error">${errs.map(([k, j]) => `${esc(names[k] || k)}: ${esc(j.last_error)}`).join("<br>")}</div>`;
   const live = s.jobs.running && s.jobs.running.info && s.jobs.running.info.live_games;
   const lc = $("#live-count");
   lc.hidden = !live; lc.textContent = live || ""; lc.className = "count live";

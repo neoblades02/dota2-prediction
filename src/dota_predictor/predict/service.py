@@ -208,7 +208,7 @@ class PredictionService:
             payload = json.loads(payload_json or "{}")
             if not (mid := payload.get("match_id")):
                 continue
-            radiant_win = conn.execute(select(games.c.radiant_win).where(games.c.valve_match_id == mid)).scalar()
+            radiant_win = conn.execute(select(games.c.radiant_win).where(games.c.valve_match_id == int(mid))).scalar()
             if radiant_win is None:
                 continue
             outcome = int(radiant_win == (payload.get("a_side") == "radiant"))

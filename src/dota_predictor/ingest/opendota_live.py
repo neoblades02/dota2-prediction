@@ -35,7 +35,7 @@ def parse_live(payload: list[dict[str, Any]]) -> list[dict[str, Any]]:
         players = g.get("players") or []
         out.append(
             {
-                "match_id": g.get("match_id"),
+                "match_id": int(g["match_id"]) if g.get("match_id") else None,
                 "series_id": g.get("series_id") or None,
                 "league_id": g["league_id"],
                 "radiant_team_id": g["team_id_radiant"],
