@@ -83,6 +83,9 @@ h2:first-child { margin-top: 4px; }
 .team { font: 600 21px/1.1 var(--display); overflow-wrap: anywhere; }
 .team.b { text-align: right; }
 .team small { display: block; font: 400 12px/1.4 var(--body); color: var(--muted); }
+.team.fav { color: var(--team-a); }
+.team.b.fav { color: var(--team-b); }
+.team small.fav { color: inherit; font-weight: 600; }
 
 /* The series bar: the one loud element */
 .bar { position: relative; display: flex; height: 30px; border-radius: 4px; overflow: hidden; background: var(--surface-2); }
@@ -191,6 +194,11 @@ const state = {
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const pct = (p, d = 1) => (p * 100).toFixed(d) + "%";
+const favourite = (p) => (p == null || Math.abs(p - 0.5) < 0.005 ? null : p >= 0.5 ? "a" : "b");
+const pick = (p, aName, bName) => {  // "Team 68.2%" for tables, or "Even" when the model has no favourite
+  const f = favourite(p);
+  return f ? `${esc(f === "a" ? aName : bName)} <b>${pct(f === "a" ? p : 1 - p)}</b>` : p == null ? "–" : "Even";
+};
 const fmtTime = (iso) => iso ? new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(iso)) : "Time to be announced";
 const fmtDay = (iso) => {
   if (!iso) return "Date to be announced";
@@ -271,6 +279,8 @@ function matchCard(fx, { live = false } = {}) {
   const a = fx.team_a_name, b = fx.team_b_name, p = fx.prediction;
   const lp = fx.live && fx.live.prediction;
   const pSeries = lp ? lp.p_series : p && p.p_series;
+  const fav = favourite(pSeries);
+  const favTag = (side) => (fav === side ? `<small class="fav">Favourite ${pct(side === "a" ? pSeries : 1 - pSeries)}</small>` : "");
   let bar;
   if (pSeries != null) bar = seriesBar(pSeries, a, b);
   else if (fx.tbd) bar = `<div class="bar pending">Opponents to be decided</div>`;
@@ -311,9 +321,9 @@ function matchCard(fx, { live = false } = {}) {
   return `<article class="match" aria-label="${esc(a)} versus ${esc(b)}">
     <div class="meta">${meta}</div>
     <div class="versus">
-      <div class="team a">${esc(a)}${live ? `<small>${fx.score_a} maps</small>` : ""}</div>
+      <div class="team a${fav === "a" ? " fav" : ""}">${esc(a)}${live ? `<small>${fx.score_a} maps</small>` : ""}${favTag("a")}</div>
       ${bar}
-      <div class="team b">${esc(b)}${live ? `<small>${fx.score_b} maps</small>` : ""}</div>
+      <div class="team b${fav === "b" ? " fav" : ""}">${esc(b)}${live ? `<small>${fx.score_b} maps</small>` : ""}${favTag("b")}</div>
     </div>
     ${sub.length ? `<div class="sub">${sub.join("")}</div>` : ""}
     ${liveBlock}
@@ -351,12 +361,12 @@ async function viewResults() {
   const rows = await api("/api/fixtures?status=finished");
   if (!rows.length) return `<p class="empty">No finished matches in the last three days.</p>`;
   let html = `<p class="lede">Finished in the last three days. The percentage is the prediction locked just before the match started.</p>`;
-  html += `<table><thead><tr><th>Match</th><th class="num">Score</th><th class="num">Locked</th><th>Result</th></tr></thead><tbody>`;
+  html += `<table><thead><tr><th>Match</th><th class="num">Score</th><th>Pick</th><th>Result</th></tr></thead><tbody>`;
   for (const fx of rows) {
     const lk = fx.locked;
     const res = lk ? (lk.result === "won" ? `<span class="won">Called it</span>` : lk.result === "lost" ? `<span class="lost">Missed</span>` : lk.result === "void" ? "Void" : "Grading") : "Not predicted";
     html += `<tr><td>${esc(fx.team_a_name)} vs ${esc(fx.team_b_name)}<br><small class="hint">${esc(fx.league_name || "")}, ${fmtDate(fx.begin_at_utc)}</small></td>
-      <td class="num">${fx.score_a}–${fx.score_b}</td><td class="num">${lk ? pct(lk.p_series) : "–"}</td><td>${res}</td></tr>`;
+      <td class="num">${fx.score_a}–${fx.score_b}</td><td>${lk ? pick(lk.p_series, fx.team_a_name, fx.team_b_name) : "–"}</td><td>${res}</td></tr>`;
   }
   return html + `</tbody></table>`;
 }
@@ -406,11 +416,11 @@ async function viewRecord() {
   html += vs("Before and after the draft", ["Before the draft", r.draft.pre_draft], ["After the draft", r.draft.post_draft],
     "Each live map is scored once its result is in, with the probability before the draft and after all ten picks.");
   html += `<h2>Calibration</h2><div class="calib">${calibration(r.calibration)}<p class="lede">Each dot is a group of predictions. A well calibrated model sits on the diagonal: when it says 70%, the favourite wins about 70% of the time. Bigger dots hold more matches.</p></div>`;
-  html += `<h2>Latest graded</h2><table><thead><tr><th>Match</th><th class="num">Locked</th><th class="num">Score</th><th>Result</th></tr></thead><tbody>`;
+  html += `<h2>Latest graded</h2><table><thead><tr><th>Match</th><th>Pick</th><th class="num">Score</th><th>Result</th></tr></thead><tbody>`;
   for (const g of r.recent) {
     const called = (g.p_team_a >= 0.5) === Boolean(g.realized_outcome);
     html += `<tr><td>${esc(g.team_a_name)} vs ${esc(g.team_b_name)}<br><small class="hint">${esc(g.league_name || "")}, ${fmtDate(g.begin_at_utc)}</small></td>
-      <td class="num">${pct(g.p_team_a)}</td><td class="num">${g.score_a}–${g.score_b}</td><td class="${called ? "won" : "lost"}">${called ? "Called it" : "Missed"}</td></tr>`;
+      <td>${pick(g.p_team_a, g.team_a_name, g.team_b_name)}</td><td class="num">${g.score_a}–${g.score_b}</td><td class="${called ? "won" : "lost"}">${called ? "Called it" : "Missed"}</td></tr>`;
   }
   return html + `</tbody></table>`;
 }
