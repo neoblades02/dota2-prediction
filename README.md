@@ -21,7 +21,7 @@ The service follows the pro schedule on its own. It predicts every match before 
 - **Coverage.** Live league games found on OpenDota but missing from the schedule still get a fixture and a prediction. An alert fires if a premium league is being played without appearing in the schedule.
 - **Track record.** One prediction per match is locked just before it starts. It is graded when the series ends, with accuracy, Brier score, log loss and a calibration chart.
 - **Self-updating ratings.** Finished games are pulled in every 30 minutes and folded into team and player ratings without a full rebuild.
-- **Team mapping.** Schedule team names are linked to match history only on exact matches. Anything else waits on the Team mapping tab for one click, because look-alike names are often different teams. Live games also fix links automatically when a scheduled match is being played.
+- **Team mapping.** Schedule team names are linked to match history only on exact matches, and only to a team with real history or a recent game, because a dead duplicate id often carries the same name. Anything else waits on the Team mapping tab for one click, because look-alike names are often different teams. Live games also fix links automatically when a scheduled match is being played: a team whose link points at a dead duplicate id is recognised by the players on the field, which corrects manual links too.
 
 ## How it works
 

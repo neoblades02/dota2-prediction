@@ -28,7 +28,13 @@ from dota_predictor.normalize.team_links import norm, set_link
 from dota_predictor.pipeline import refresh_reference
 from dota_predictor.predict.service import PredictionService
 from dota_predictor.service.coverage import coverage_alerts
-from dota_predictor.storage.models import SERIES_TYPE_TO_BEST_OF, fixtures, pro_match_index, team_links, tournaments
+from dota_predictor.storage.models import (
+    SERIES_TYPE_TO_BEST_OF,
+    fixtures,
+    predictions,
+    pro_match_index,
+    tournaments,
+)
 from dota_predictor.storage.upsert import dialect_insert
 
 logger = get_logger("service.jobs")
@@ -36,7 +42,8 @@ logger = get_logger("service.jobs")
 INTERVALS = {"schedule": 600, "running": 120, "results": 1800}  # seconds
 LOCK_LEAD = timedelta(minutes=5)  # lock the pre-match prediction this close to the scheduled start
 LIVE_WINDOW_BEFORE, LIVE_WINDOW_AFTER = timedelta(hours=12), timedelta(hours=6)
-STALE_OD_FIXTURE = timedelta(hours=12)
+STALE_FIXTURE = timedelta(hours=12)
+ROSTER_MATCH = 3  # live players shared with a linked id's last lineup for the live id to be the same team
 UNAVAILABLE_RETRY = timedelta(days=2)  # OpenDota fills player rows a little after a game ends
 INDEX_OVERLAP = timedelta(days=2)
 REFERENCE_EVERY = timedelta(hours=24)
@@ -125,9 +132,19 @@ class JobRunner:
         return n
 
     def _lock_due(self, conn: Connection, now: datetime, live_ids: set[str]) -> int:
-        """The graded prediction: pre-match view, written once as the match is about to start."""
+        """The graded prediction: pre-match view, written once as the match is about to start.
+
+        A fixture is locked once, whatever the model version, and never after a map has been played: by then
+        the ratings may already include that map, so there is no honest pre-match prediction left to make.
+        """
         n = 0
+        locked = {
+            r[0]
+            for r in conn.execute(select(predictions.c.target_ref).where(predictions.c.prediction_type == "locked"))
+        }
         for fx in self._open_fixtures(conn):
+            if fx["fixture_id"] in locked or (fx["score_a"] or 0) + (fx["score_b"] or 0):
+                continue
             begin = aware_utc(fx["begin_at_utc"])
             due = fx["status"] == "running" or fx["fixture_id"] in live_ids or (begin and begin <= now + LOCK_LEAD)
             if due and (pred := self.service.predict_fixture({**fx, "status": "upcoming"})):
@@ -240,47 +257,42 @@ class JobRunner:
         """Fix a scheduled match's team links from a live game played at the same time.
 
         A team cannot play two matches at once, so a scheduled match that shares one live team and the start
-        window is this game: its other side is the other live team. Sides also resolve by an exact name
-        match. Automatic links may be corrected (OpenDota often has look-alike duplicate team ids); manual
-        links never are. Applied only if exactly one scheduled match fits.
+        window is this game: its other side is the other live team. A side whose linked id last fielded the
+        players now on the field is that live team under a new id (OpenDota often has look-alike duplicate
+        team ids). Sides also resolve by an exact name match. Any link may be corrected, manual ones too: a
+        manual link is a name guess, while a game being played is evidence. Applied only if exactly one
+        scheduled match fits.
         """
         r, d = g["radiant_team_id"], g["dire_team_id"]
         live_names = {r: norm(g.get("radiant_team_name")), d: norm(g.get("dire_team_name"))}
+        live_accounts = {r: [a for a, _ in g["radiant"]], d: [a for a, _ in g["dire"]]}
         cond = and_(
             fixtures.c.source == "pandascore",
             fixtures.c.status.in_(OPEN),
             fixtures.c.ps_team_a_id.is_not(None),
             fixtures.c.ps_team_b_id.is_not(None),
-            or_(
-                fixtures.c.team_a_id.in_([r, d]),
-                fixtures.c.team_b_id.in_([r, d]),
-                and_(fixtures.c.team_a_id.is_(None), fixtures.c.team_b_id.is_(None)),
-            ),
         )
         resolved = []
         for fx in self._near(conn, now, cond):
-            manual = {
-                ps_id
-                for (ps_id,) in conn.execute(
-                    select(team_links.c.ps_team_id).where(
-                        team_links.c.ps_team_id.in_([fx["ps_team_a_id"], fx["ps_team_b_id"]]),
-                        team_links.c.method == "manual",
-                    )
-                )
-            }
             sides = {}
             for side in ("a", "b"):
                 tid = fx[f"team_{side}_id"]
-                if tid and tid not in (r, d) and fx[f"ps_team_{side}_id"] in manual:
-                    break
+                if tid in (r, d):
+                    sides[side] = tid
+                    continue
+                roster = [
+                    t for t in (r, d) if tid and self.service.shared_players(tid, live_accounts[t]) >= ROSTER_MATCH
+                ]
+                if len(roster) == 1:
+                    sides[side] = roster[0]
+                    continue
                 hits = [t for t in (r, d) if live_names[t] and live_names[t] == norm(fx[f"team_{side}_name"])]
-                sides[side] = tid if tid in (r, d) else (hits[0] if len(hits) == 1 else None)
-            else:
-                a, b = sides["a"], sides["b"]
-                a = a or (b and (d if b == r else r))
-                b = b or (a and (d if a == r else r))
-                if a and b and {a, b} == {r, d}:
-                    resolved.append((fx, a, b))
+                sides[side] = hits[0] if len(hits) == 1 else None
+            a, b = sides["a"], sides["b"]
+            a = a or (b and (d if b == r else r))
+            b = b or (a and (d if a == r else r))
+            if a and b and {a, b} == {r, d}:
+                resolved.append((fx, a, b))
         if len(resolved) != 1:
             return []
         fx, a, b = resolved[0]
@@ -301,13 +313,12 @@ class JobRunner:
         return n
 
     def _expire_stale(self, conn: Connection, now: datetime) -> int:
-        """An OpenDota-only fixture with no live game and no result for half a day is dropped."""
+        """A fixture neither provider has touched for half a day is dropped; its locked prediction grades void."""
         res = conn.execute(
             update(fixtures)
             .where(
-                fixtures.c.source == "opendota",
                 fixtures.c.status.in_(OPEN),
-                fixtures.c.updated_at_utc < now - STALE_OD_FIXTURE,
+                fixtures.c.updated_at_utc < now - STALE_FIXTURE,
             )
             .values(status="canceled", updated_at_utc=now)
         )

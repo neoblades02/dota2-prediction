@@ -390,13 +390,14 @@ function alertsBlock(all = false) {
 
 async function viewRecord() {
   const r = await api("/api/record");
-  const o = r.overall;
-  if (!o.n) return `<p class="empty">No graded predictions yet. Each match is graded once it finishes, using the prediction locked just before it started.</p>`;
+  if (!r.overall.n) return `<p class="empty">No graded predictions yet. Each match is graded once it finishes, using the prediction locked just before it started.</p>`;
+  // Headline: matches where both teams have a record. Qualifier coin flips between unknown teams say nothing about the model.
+  const o = r.ok.n ? r.ok : r.overall;
   const stat = (v, k) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`;
-  let html = `<div class="stats">${stat(o.n, "Matches graded")}${stat(pct(o.accuracy), "Favourite won")}${stat(o.brier.toFixed(3), "Brier score, lower is better")}${stat(o.log_loss.toFixed(3), "Log loss, lower is better")}</div>`;
+  let html = `<div class="stats">${stat(o.n, r.ok.n ? "Matches graded, both teams known" : "Matches graded")}${stat(pct(o.accuracy), "Favourite won")}${stat(o.brier.toFixed(3), "Brier score, lower is better")}${stat(o.log_loss.toFixed(3), "Log loss, lower is better")}</div>`;
   const line = (name, s) => `<tr><td>${name}</td><td class="num">${s.n}</td><td class="num">${s.n ? pct(s.accuracy) : "–"}</td><td class="num">${s.n ? s.brier.toFixed(3) : "–"}</td></tr>`;
   html += `<h2>By group</h2><table class="split-table"><thead><tr><th></th><th class="num">Matches</th><th class="num">Favourite won</th><th class="num">Brier</th></tr></thead><tbody>
-    ${line("Tier S and A", r.major)}${line("Other tiers", r.other_tiers)}${line("Low data", r.low_data)}</tbody></table>`;
+    ${line("All matches", r.overall)}${line("Tier S and A", r.major)}${line("Other tiers", r.other_tiers)}${line("Both teams known", r.ok)}${line("Low data", r.low_data)}</tbody></table>`;
   const vs = (title, a, b, hint) => `<h2>${title}</h2>` + (a[1].n
     ? `<table class="split-table"><thead><tr><th></th><th class="num">Matches</th><th class="num">Favourite won</th><th class="num">Brier</th></tr></thead><tbody>${line(...a)}${line(...b)}</tbody></table>`
     : `<p class="hint">${hint}</p>`);

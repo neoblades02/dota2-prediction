@@ -58,6 +58,12 @@ class PredictionService:
     def _games(self, team_id: int) -> int:
         return self.predictor.state.team_elo.get_games_count(team_id)
 
+    def shared_players(self, team_id: int, accounts: list[int | None]) -> int:
+        """How many of these live accounts were in the team id's most recent five-player lineup."""
+        with self.lock:
+            last = set(self.predictor.state.team_last_lineup.get(team_id) or ())
+            return sum(self.predictor.account_to_player.get(a) in last for a in accounts if a)
+
     def _pre_draft(self, a: int, b: int) -> dict[str, Any]:
         with self.lock:
             res = self.predictor.predict_side_neutral(a, b)
@@ -315,6 +321,7 @@ class PredictionService:
             "overall": summary(rows),
             "major": summary([r for r in rows if r["tier"] in MAJOR_TIERS]),
             "other_tiers": summary([r for r in rows if r["tier"] not in MAJOR_TIERS]),
+            "ok": summary([r for r in rows if r["roster_confidence"] != "low_data"]),
             "low_data": summary([r for r in rows if r["roster_confidence"] == "low_data"]),
             "book": book,
             "draft": draft,

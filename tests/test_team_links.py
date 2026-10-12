@@ -130,3 +130,17 @@ def test_shared_tag_links_the_only_recently_active_team(conn):
     )
     assert _link(conn, 40, "Nova", "NOV") == 30
     assert _link(conn, 41, "Falcons Squad", "TF") is None  # both "TF" teams active: still ambiguous
+
+
+def test_quiet_team_with_little_history_waits_for_a_click(conn):
+    from datetime import timedelta
+
+    from sqlalchemy import update
+
+    # "Cresent" once matched a 3-game id silent since August while the real team played on as "Crescent"
+    old = datetime.now(UTC) - timedelta(days=45)
+    conn.execute(update(games).values(start_utc=old).where(games.c.radiant_team_id.in_([1, 6])))
+    assert _link(conn, 13, "Tundra Falcons") is None
+    row = conn.execute(select(team_links).where(team_links.c.ps_team_id == 13)).mappings().one()
+    assert json.loads(row["suggestions_json"])[0]["team_id"] == 6
+    assert _link(conn, 14, "Team Spirit") == 1  # an established team keeps linking through a quiet spell

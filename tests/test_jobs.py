@@ -168,6 +168,9 @@ def test_od_series_settles_and_grades(engine, tmp_path):
         results = [r[0] for r in c.execute(select(prediction_results.c.result_status))]
     assert (fx["status"], fx["score_a"], fx["score_b"], fx["winner"], fx["best_of"]) == ("finished", 2, 0, "a", 3)
     assert len(results) == 1 and results[0] in ("won", "lost")
+    with engine.connect() as c:
+        record = runner.service.record(c)
+    assert record["ok"]["n"] == 1 and record["low_data"] == {"n": 0}  # both teams have 30 games on record
 
 
 def test_coverage_alerts(engine):
@@ -300,9 +303,9 @@ def test_live_game_corrects_an_automatic_link_to_a_duplicate_team_id(engine, tmp
     assert (link["team_id"], link["method"]) == (2, "live_match")
 
 
-def test_live_game_never_overrides_a_manual_link(engine, tmp_path):
+def test_live_game_corrects_a_manual_link_when_the_scheduled_opponent_is_on_the_field(engine, tmp_path):
     with engine.begin() as conn:
-        _ps_fixture(conn, team_a_id=1, team_b_id=55, team_b_name="Too")
+        _ps_fixture(conn, team_a_id=1, team_b_id=55, team_b_name="Too")  # 55: a hand-picked id that never plays
         conn.execute(
             insert(team_links).values(ps_team_id=502, ps_name="Too", team_id=55, method="manual", updated_at_utc=NOW)
         )
@@ -311,7 +314,9 @@ def test_live_game_never_overrides_a_manual_link(engine, tmp_path):
     with engine.connect() as c:
         ids = sorted(r[0] for r in c.execute(select(fixtures.c.fixture_id)))
         team_b = c.execute(select(fixtures.c.team_b_id).where(fixtures.c.fixture_id == "ps:7")).scalar()
-    assert ids == ["od:777", "ps:7"] and team_b == 55
+        link = c.execute(select(team_links).where(team_links.c.ps_team_id == 502)).mappings().one()
+    assert ids == ["ps:7"] and team_b == 2
+    assert (link["team_id"], link["method"]) == (2, "live_match")
 
 
 def test_schedule_match_wins_over_an_earlier_opendota_copy_with_lookalike_ids(engine, tmp_path):
@@ -330,3 +335,56 @@ def test_schedule_match_wins_over_an_earlier_opendota_copy_with_lookalike_ids(en
         team_b = c.execute(select(fixtures.c.team_b_id).where(fixtures.c.fixture_id == "ps:7")).scalar()
     assert status == {"od:777": "canceled", "ps:7": "upcoming"} and team_b == 2
     assert set(runner.live) == {"ps:7"}
+
+
+def test_lock_is_written_once_even_after_a_model_change(engine, tmp_path):
+    runner = _runner(engine, tmp_path, _live(heroes=False))
+    runner.run("running")
+    runner.service.model_version = "retrained"  # a deploy with new model files must not re-lock a running match
+    runner.run("running")
+    assert _kinds(engine) == [("od:777", "locked")]
+
+
+def test_no_lock_once_a_map_has_been_played(engine, tmp_path):
+    with engine.begin() as conn:
+        _ps_fixture(conn, team_a_id=1, team_b_id=2, status="running", score_a=1)
+    runner = _runner(engine, tmp_path, [])
+    runner.run("running")
+    assert ("ps:7", "locked") not in _kinds(engine)
+
+
+def test_stale_schedule_fixture_is_canceled(engine, tmp_path):
+    with engine.begin() as conn:
+        _ps_fixture(conn, team_a_id=1, team_b_id=2, status="running", updated_at_utc=NOW - timedelta(hours=13))
+    runner = _runner(engine, tmp_path, [])
+    runner.run("running")
+    with engine.connect() as c:
+        assert c.execute(select(fixtures.c.status)).scalar() == "canceled"
+
+
+def _same_players_under_new_ids(conn):
+    """One game where ids 55 and 66 fielded exactly the players of teams 2 and 1: dead duplicate ids."""
+    m = _match(40, 55, 66, True)
+    for p, acc in zip(m["players"], [20, 21, 22, 23, 24, 10, 11, 12, 13, 14], strict=True):
+        p["account_id"] = acc
+    normalize_match_detail(conn, m)
+
+
+def test_live_game_relinks_dead_duplicate_ids_by_their_players(engine, tmp_path):
+    with engine.begin() as conn:
+        _same_players_under_new_ids(conn)
+        _ps_fixture(conn, team_a_id=55, team_b_id=66, team_a_name="Too", team_b_name="Won")  # no id or name matches
+        conn.execute(
+            insert(team_links),
+            [
+                {"ps_team_id": 501, "ps_name": "Too", "team_id": 55, "method": "exact_name", "updated_at_utc": NOW},
+                {"ps_team_id": 502, "ps_name": "Won", "team_id": 66, "method": "exact_name", "updated_at_utc": NOW},
+            ],
+        )
+    runner = _runner(engine, tmp_path, _live())
+    runner.run("running")
+    with engine.connect() as c:
+        fx = c.execute(select(fixtures)).mappings().all()
+        links = dict(c.execute(select(team_links.c.ps_team_id, team_links.c.team_id)).all())
+    assert [f["fixture_id"] for f in fx] == ["ps:7"] and (fx[0]["team_a_id"], fx[0]["team_b_id"]) == (2, 1)
+    assert links == {501: 2, 502: 1}

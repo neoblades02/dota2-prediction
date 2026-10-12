@@ -23,6 +23,7 @@ from dota_predictor.storage.upsert import dialect_insert
 
 AFFIXES = {"team", "gaming", "esports", "esport", "club"}
 ACTIVE_WINDOW = timedelta(days=90)  # an org renamed under a new id keeps playing only on the new one
+QUIET_WINDOW, QUIET_GAMES = timedelta(days=30), 20  # a quiet id with this little history is often a dead duplicate
 
 
 def norm(s: str | None) -> str:
@@ -73,17 +74,23 @@ class TeamIndex:
         active = [i for i in ids if self.last_played.get(i) and self.last_played[i] >= cutoff]
         return active[0] if len(active) == 1 else None
 
+    def _established(self, tid: int) -> bool:
+        """Enough history to trust a name match, or played recently enough to be the live id for that name."""
+        last = self.last_played.get(tid)
+        return self.games.get(tid, 0) >= QUIET_GAMES or bool(last and last >= datetime.now(UTC) - QUIET_WINDOW)
+
     def match(self, name: str | None, acronym: str | None = None) -> tuple[int | None, str | None, list[dict]]:
         """(team_id, method, suggestions). team_id is None unless the match is deterministic."""
         n, a = norm(name), norm(acronym)
         by_name = self._played(self.names.get(n, []))
         if by_name:  # several provider ids for one org: the active one, else the one with the most games
-            return self._single(by_name) or by_name[0], "exact_name", []
+            tid = self._single(by_name) or by_name[0]
+            return (tid, "exact_name", []) if self._established(tid) else (None, None, self.suggest(n))
         by_tag = self._single(self._played(self.tags.get(n, []) + self.tags.get(a, []) + self.names.get(a, [])))
-        if by_tag:
+        if by_tag and self._established(by_tag):
             return by_tag, "exact_tag", []
         by_core = self._single(self._played(self.cores.get(core(name), []))) if core(name) else None
-        if by_core:
+        if by_core and self._established(by_core):
             return by_core, "core_name", []
         return None, None, self.suggest(n)
 
