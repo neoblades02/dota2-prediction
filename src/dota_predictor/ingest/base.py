@@ -102,6 +102,13 @@ class RateLimitedClient:
 
         return _execute_req()
 
+    def post(self, endpoint: str) -> httpx.Response:
+        url = endpoint if endpoint.startswith("http") else f"{self.base_url}/{endpoint.lstrip('/')}"
+        self._wait_for_rate_limit()
+        resp = self.client.post(url)
+        self._update_limits(resp)
+        return resp
+
     def close(self) -> None:
         self.client.close()
 

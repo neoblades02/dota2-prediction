@@ -25,9 +25,11 @@ class _Explorer:
     def __init__(self, n_matches=4500, max_limit=1000, max_ids=50):
         self.n, self.max_limit, self.max_ids = n_matches, max_limit, max_ids
         self.limits: list[int] = []
+        self.sqls: list[str] = []
 
     def get(self, path, params=None):
         sql = params["sql"]
+        self.sqls.append(sql)
         if "FROM matches" in sql:
             limit = int(re.search(r"LIMIT (\d+)", sql).group(1))
             cursor = int(re.search(r"m\.match_id > (\d+)", sql).group(1))
@@ -102,3 +104,12 @@ def test_rejections_carry_opendota_message():
     with pytest.raises(ex.ExplorerError, match="Invalid API key format") as info:
         ex._query(Rejecting(), "SELECT 1")
     assert not isinstance(info.value, ex.ExplorerTimeout)
+
+
+def test_index_takes_every_league_unless_tiers_are_given(engine, monkeypatch):
+    fake = _Explorer(n_matches=10)
+    monkeypatch.setattr(ex, "RateLimitedClient", lambda *a, **k: fake)
+    ex.sync_explorer_match_index(engine)
+    assert "l.tier IN" not in fake.sqls[0] and "LEFT JOIN leagues" in fake.sqls[0]
+    ex.sync_explorer_match_index(engine, tiers=("premium",))
+    assert "l.tier IN ('premium')" in fake.sqls[-1]

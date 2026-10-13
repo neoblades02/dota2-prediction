@@ -23,6 +23,7 @@ from dota_predictor.ingest.explorer import (
     sync_explorer_player_matches,
     sync_explorer_teams,
 )
+from dota_predictor.ingest.opendota import recover_match_details
 from dota_predictor.logging_config import get_logger
 from dota_predictor.normalize.team_links import norm, set_link
 from dota_predictor.pipeline import refresh_reference
@@ -39,12 +40,16 @@ from dota_predictor.storage.upsert import dialect_insert
 
 logger = get_logger("service.jobs")
 
-INTERVALS = {"schedule": 600, "running": 120, "results": 1800}  # seconds
+INTERVALS = {"schedule": 600, "running": 60, "results": 600}  # seconds; ~1,800 OpenDota calls a day of the free 3,000
 LOCK_LEAD = timedelta(minutes=5)  # lock the pre-match prediction this close to the scheduled start
 LIVE_WINDOW_BEFORE, LIVE_WINDOW_AFTER = timedelta(hours=12), timedelta(hours=6)
 STALE_FIXTURE = timedelta(hours=12)
 ROSTER_MATCH = 3  # live players shared with a linked id's last lineup for the live id to be the same team
 UNAVAILABLE_RETRY = timedelta(days=2)  # OpenDota fills player rows a little after a game ends
+RECOVER_AFTER = timedelta(hours=3)  # a queued game this old that nobody fetched is tried by id regardless
+RECOVER_BATCH = 50  # ponytail: per results cycle; raise if the free OpenDota quota is not the bottleneck
+ENDED_POLLS = 2  # a game missing from this many live polls in a row has ended (one miss may be the feed blinking)
+GIVE_UP = timedelta(hours=6)  # ponytail: a requested game not back within this after the last request is dropped
 INDEX_OVERLAP = timedelta(days=2)
 REFERENCE_EVERY = timedelta(hours=24)
 OPEN = ("upcoming", "running")
@@ -82,6 +87,8 @@ class JobRunner:
         self.schedule_enabled = pandascore.enabled() if schedule_enabled is None else schedule_enabled
         self.status = {name: JobStatus() for name in INTERVALS}
         self.live: dict[str, dict[str, Any]] = {}  # fixture_id -> latest live game and draft prediction
+        self.feed: set[int] = set()  # match ids seen on the live feed and not yet gone
+        self.gone: dict[int, int] = {}  # match id -> live polls in a row it has been missing from
         self.alerts: list[dict[str, Any]] = []
         self._last_reference_sync: datetime | None = None
 
@@ -167,6 +174,7 @@ class JobRunner:
         live_now: dict[str, dict[str, Any]] = {}
         with self.engine.begin() as conn:
             for g in games:
+                self._queue_game(conn, g, now)
                 fx = self._attach(conn, g, now)
                 if fx is None:
                     continue
@@ -179,7 +187,66 @@ class JobRunner:
             info["expired"] = self._expire_stale(conn, now)
         self.live = live_now
         info["live_games"] = len(games)
+        info["recovered"] = self._recover(self._ended({g["match_id"] for g in games if g.get("match_id")}))
+        info |= self.settle_and_check(now)  # so a series grades within a minute of ending
         return info
+
+    def _ended(self, now_ids: set[int]) -> list[int]:
+        """Games that left the live feed for good; a single missing poll is not trusted."""
+        ended = []
+        for m in list(self.feed):
+            if m in now_ids:
+                self.gone.pop(m, None)
+                continue
+            self.gone[m] = self.gone.get(m, 0) + 1
+            if self.gone[m] >= ENDED_POLLS:
+                ended.append(m)
+                self.feed.discard(m)
+                self.gone.pop(m)
+        self.feed |= now_ids
+        return ended
+
+    def _recover(self, match_ids: list[int]) -> dict[str, int]:
+        """Fetch games that just ended, by id, and fold them into the ratings right away."""
+        if not match_ids:
+            return {}
+        with self.engine.connect() as conn:
+            rows = (
+                conn.execute(
+                    select(pro_match_index).where(
+                        pro_match_index.c.match_id.in_(match_ids),
+                        pro_match_index.c.detail_status.in_(("pending", "unavailable", "requested")),
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        out = recover_match_details(self.engine, rows)
+        if out.get("fetched"):
+            self.service.refresh()
+        return out
+
+    def _queue_game(self, conn: Connection, g: Mapping[str, Any], now: datetime) -> None:
+        """Every live league game is indexed, whatever its league, so the results job collects it once finished."""
+        if not g.get("match_id"):
+            return
+        conn.execute(
+            dialect_insert(conn, pro_match_index)
+            .values(
+                match_id=g["match_id"],
+                start_time_utc=g.get("started_at") or now,
+                radiant_team_id=g["radiant_team_id"],
+                radiant_name=g.get("radiant_team_name"),
+                dire_team_id=g["dire_team_id"],
+                dire_name=g.get("dire_team_name"),
+                leagueid=g["league_id"],
+                series_id=g.get("series_id"),
+                detail_status="pending",
+                first_seen_utc=now,
+                last_seen_utc=now,
+            )
+            .on_conflict_do_nothing(index_elements=["match_id"])
+        )
 
     def _near(self, conn: Connection, now: datetime, cond: Any) -> list[dict[str, Any]]:
         out = []
@@ -344,6 +411,7 @@ class JobRunner:
             "players": sync_explorer_player_matches(self.engine),
             "team_names": sync_explorer_teams(self.engine, only_placeholders=True),
         }
+        info["recovered"] = recover_match_details(self.engine, self._explorer_misses(now))
         reload_names = False
         if self._last_reference_sync is None or now - self._last_reference_sync >= REFERENCE_EVERY:
             info["reference"] = refresh_reference(self.engine)
@@ -351,6 +419,36 @@ class JobRunner:
         info["games_added"] = self.service.refresh(reload_names=reload_names)
         info |= self.settle_and_check(now)
         return info
+
+    def _explorer_misses(self, now: datetime) -> list[Mapping[str, Any]]:
+        """Games to fetch by id: those asked from Valve and awaited, and any still unfilled hours after starting."""
+        unfilled = or_(
+            pro_match_index.c.detail_status == "pending",
+            and_(
+                pro_match_index.c.detail_status == "unavailable",
+                pro_match_index.c.detail_error == "explorer: no player rows",
+            ),
+        )
+        with self.engine.connect() as conn:
+            return (
+                conn.execute(
+                    select(pro_match_index)
+                    .where(
+                        pro_match_index.c.start_time_utc >= now - UNAVAILABLE_RETRY,
+                        or_(
+                            and_(
+                                pro_match_index.c.detail_status == "requested",
+                                pro_match_index.c.last_seen_utc >= now - GIVE_UP,
+                            ),
+                            and_(unfilled, pro_match_index.c.start_time_utc <= now - RECOVER_AFTER),
+                        ),
+                    )
+                    .order_by(pro_match_index.c.start_time_utc)
+                    .limit(RECOVER_BATCH)
+                )
+                .mappings()
+                .all()
+            )
 
     def settle_and_check(self, now: datetime) -> dict[str, Any]:
         with self.engine.begin() as conn:
@@ -376,7 +474,7 @@ class JobRunner:
                     pro_match_index.c.dire_team_id,
                     pro_match_index.c.radiant_win,
                     pro_match_index.c.series_type,
-                ).where(cond)
+                ).where(cond, pro_match_index.c.radiant_win.is_not(None))
             ).all()
             if not games:
                 continue

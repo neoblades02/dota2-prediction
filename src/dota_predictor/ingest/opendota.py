@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from collections import Counter
+from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select, update
@@ -13,11 +15,19 @@ from dota_predictor.ingest.base import (
     set_sync_cursor,
 )
 from dota_predictor.logging_config import get_logger
+from dota_predictor.normalize.games import normalize_match_detail
 from dota_predictor.storage.models import pro_match_index
 from dota_predictor.storage.raw_store import save_raw_payload
 from dota_predictor.storage.upsert import dialect_insert
 
 logger = get_logger("ingest.opendota")
+
+REQUEST_AGAIN = timedelta(hours=1)  # a parse request not answered by then is repeated
+MAX_REQUESTS = 3
+
+
+def _aware(dt: datetime | None) -> datetime | None:
+    return dt.replace(tzinfo=UTC) if dt is not None and dt.tzinfo is None else dt
 
 
 def sync_pro_match_index(
@@ -418,3 +428,81 @@ def sync_reference_data(engine: Engine) -> dict[str, Any]:
         client.close()
 
     return results
+
+
+def recover_match_details(engine: Engine, rows: list[Mapping[str, Any]]) -> dict[str, int]:
+    """Games fetched by id from /matches/{id}; `rows` are pro_match_index rows.
+
+    Leagues OpenDota rates below professional never reach its pro tables, and /matches 404s on a game it has
+    not stored, so a miss asks OpenDota to pull the game from Valve (POST /request) and a later cycle picks it
+    up; an unanswered request is repeated after an hour, three times at most. A fetched game is stored raw,
+    normalized at once and its index row completed, so series settle from it and the ratings fold it in.
+    """
+    client = RateLimitedClient(provider="opendota", base_url="https://api.opendota.com/api")
+    out: Counter[str] = Counter()
+    try:
+        for row in rows:
+            match_id, status = row["match_id"], row["detail_status"]
+            endpoint = f"/matches/{match_id}"
+            try:
+                resp = client.get(endpoint)
+            except RateLimitExhaustedError:
+                logger.warning("OpenDota quota exhausted while recovering games", left=len(rows) - sum(out.values()))
+                break
+            payload = resp.json() if resp.status_code == 200 else {}
+            now = datetime.now(UTC)
+            with engine.begin() as conn:
+                if payload.get("radiant_win") is not None:
+                    raw_id = save_raw_payload(
+                        conn=conn,
+                        provider="opendota",
+                        endpoint=endpoint,
+                        request_key=str(match_id),
+                        payload=payload,
+                        fetched_at_utc=now,
+                    )
+                    normalize_match_detail(conn, payload, raw_object_id=raw_id)
+                    values: dict[str, Any] = {
+                        "detail_status": "fetched",
+                        "detail_error": None,
+                        "last_seen_utc": now,
+                        "radiant_win": payload["radiant_win"],
+                        "duration_s": payload.get("duration"),
+                        "radiant_score": payload.get("radiant_score"),
+                        "dire_score": payload.get("dire_score"),
+                    }
+                    for key, src in (
+                        ("series_id", "series_id"),
+                        ("series_type", "series_type"),
+                        ("leagueid", "leagueid"),
+                    ):
+                        if payload.get(src) is not None:
+                            values[key] = payload[src]
+                    if (payload.get("league") or {}).get("name"):
+                        values["league_name"] = payload["league"]["name"]
+                    if payload.get("start_time"):
+                        values["start_time_utc"] = datetime.fromtimestamp(payload["start_time"], tz=UTC)
+                    conn.execute(update(pro_match_index).where(pro_match_index.c.match_id == match_id).values(**values))
+                    out["fetched"] += 1
+                    continue
+                asked = (
+                    int(str(row.get("detail_error") or "requests=0").rsplit("=", 1)[-1] or 0)
+                    if status == "requested"
+                    else 0
+                )
+                last = _aware(row.get("last_seen_utc")) or now
+                due = status != "requested" or (asked < MAX_REQUESTS and last <= now - REQUEST_AGAIN)
+                if due and client.post(f"/request/{match_id}").status_code == 200:
+                    conn.execute(
+                        update(pro_match_index)
+                        .where(pro_match_index.c.match_id == match_id)
+                        .values(detail_status="requested", detail_error=f"requests={asked + 1}", last_seen_utc=now)
+                    )
+                    out["requested"] += 1
+                elif status == "requested":
+                    out["waiting"] += 1
+                else:  # refused for now; the next cycle asks again
+                    out["refused"] += 1
+    finally:
+        client.close()
+    return dict(out)

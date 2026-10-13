@@ -9,8 +9,10 @@ from dota_predictor.predict.live_draft import LiveDraftPredictor
 from dota_predictor.predict.service import PredictionService
 from dota_predictor.service.coverage import coverage_alerts
 from dota_predictor.service.jobs import JobRunner
+from dota_predictor.settings import get_settings
 from dota_predictor.storage.models import (
     fixtures,
+    games,
     prediction_results,
     predictions,
     pro_match_index,
@@ -148,8 +150,8 @@ def test_od_series_settles_and_grades(engine, tmp_path):
         conn.execute(
             insert(pro_match_index),
             [
-                {
-                    "match_id": 9001 + k,
+                {  # the live game 9001 is already queued without a result and must not count
+                    "match_id": 9002 + k,
                     "series_id": 777,
                     "series_type": 1,
                     "radiant_team_id": 2,
@@ -171,6 +173,102 @@ def test_od_series_settles_and_grades(engine, tmp_path):
     with engine.connect() as c:
         record = runner.service.record(c)
     assert record["ok"]["n"] == 1 and record["low_data"] == {"n": 0}  # both teams have 30 games on record
+
+
+def test_every_live_game_is_queued_for_ingestion_and_does_not_settle_before_its_result(engine, tmp_path):
+    runner = _runner(engine, tmp_path, _live())
+    runner.run("running")
+    with engine.connect() as c:
+        row = c.execute(select(pro_match_index).where(pro_match_index.c.match_id == 9001)).mappings().one()
+    assert (row["detail_status"], row["leagueid"], row["series_id"], row["radiant_team_id"], row["dire_team_id"]) == (
+        "pending",
+        15000,
+        777,
+        2,
+        1,
+    )
+    runner.settle_and_check(NOW)
+    with engine.connect() as c:
+        assert c.execute(select(fixtures.c.status)).scalar() == "running"  # a game without a result is not a win
+
+
+class _OpenDota:
+    """REST stand-in: knows one finished game, 404s on the rest, and records parse requests."""
+
+    def __init__(self, known):
+        self.known, self.requested, self.gets = known, [], []
+
+    def get(self, path, params=None):
+        self.gets.append(path)
+        mid = int(path.rsplit("/", 1)[1])
+        return _Resp(200, self.known[mid]) if mid in self.known else _Resp(404, {"error": "Not Found"})
+
+    def post(self, path):
+        self.requested.append(int(path.rsplit("/", 1)[1]))
+        return _Resp(200, {"job": {"jobId": 1}})
+
+    def close(self):
+        pass
+
+
+class _Resp:
+    def __init__(self, status, body):
+        self.status_code, self._body, self.text = status, body, str(body)
+
+    def json(self):
+        return self._body
+
+
+def _index_row(match_id, status, error=None, age=timedelta(hours=4)):
+    return {
+        "match_id": match_id,
+        "detail_status": status,
+        "detail_error": error,
+        "leagueid": 20124,
+        "radiant_team_id": 7,
+        "dire_team_id": 8,
+        "start_time_utc": NOW - age,
+        "first_seen_utc": NOW,
+        "last_seen_utc": NOW,
+    }
+
+
+def test_results_recovers_games_the_explorer_lacks(engine, tmp_path, monkeypatch):
+    """A game in a league OpenDota does not track as pro: fetched by id, or requested from Valve on a miss."""
+    import dota_predictor.ingest.opendota as od
+    import dota_predictor.service.jobs as jobs
+
+    game = _match(0, 7, 8, True) | {"match_id": 90001, "leagueid": 20124, "league": {"name": "UDL", "tier": "excluded"}}
+    fake = _OpenDota({90001: game})
+    monkeypatch.setattr(od, "RateLimitedClient", lambda *a, **k: fake)
+    monkeypatch.setattr(get_settings(), "raw_store_dir", tmp_path / "raw")
+    for name in ("sync_explorer_match_index", "sync_explorer_player_matches", "sync_explorer_teams"):
+        monkeypatch.setattr(jobs, name, lambda *a, **k: {})
+    monkeypatch.setattr(jobs, "refresh_reference", lambda *a, **k: {})
+    with engine.begin() as conn:
+        conn.execute(
+            insert(pro_match_index),
+            [
+                _index_row(90001, "unavailable", "explorer: no player rows"),  # finished 4 h ago, OpenDota has it
+                _index_row(90002, "unavailable", "explorer: no player rows"),  # OpenDota never saw it: ask for it
+                _index_row(90003, "requested"),  # asked for last cycle, still not there: keep waiting
+                _index_row(90004, "unavailable", "explorer: no player rows", age=timedelta(hours=1)),  # too fresh
+            ],
+        )
+    runner = _runner(engine, tmp_path, [])
+    runner.run("results")
+    assert runner.status["results"].last_error is None, runner.status["results"].last_error
+    with engine.connect() as c:
+        status = dict(c.execute(select(pro_match_index.c.match_id, pro_match_index.c.detail_status)).all())
+        result = c.execute(select(pro_match_index.c.radiant_win).where(pro_match_index.c.match_id == 90001)).scalar()
+        stored = c.execute(
+            select(games.c.radiant_team_id, games.c.dire_team_id).where(games.c.valve_match_id == 90001)
+        ).one()
+    assert (status[90001], status[90002], status[90003]) == ("fetched", "requested", "requested")
+    assert status[90004] != "fetched" and "/matches/90004" not in fake.gets
+    assert result is True and tuple(stored) == (7, 8)
+    assert fake.requested == [90002]
+    assert runner.service._games(7) == 1  # the new team is known to the ratings right away
 
 
 def test_coverage_alerts(engine):
@@ -388,3 +486,109 @@ def test_live_game_relinks_dead_duplicate_ids_by_their_players(engine, tmp_path)
         links = dict(c.execute(select(team_links.c.ps_team_id, team_links.c.team_id)).all())
     assert [f["fixture_id"] for f in fx] == ["ps:7"] and (fx[0]["team_a_id"], fx[0]["team_b_id"]) == (2, 1)
     assert links == {501: 2, 502: 1}
+
+
+def test_a_refused_parse_request_is_retried_next_cycle(engine, tmp_path, monkeypatch):
+    import dota_predictor.ingest.opendota as od
+    import dota_predictor.service.jobs as jobs
+
+    class Refusing(_OpenDota):
+        def post(self, path):
+            super().post(path)
+            return _Resp(429, {"error": "rate limit"})
+
+    fake = Refusing({})
+    monkeypatch.setattr(od, "RateLimitedClient", lambda *a, **k: fake)
+    for name in ("sync_explorer_match_index", "sync_explorer_player_matches", "sync_explorer_teams"):
+        monkeypatch.setattr(jobs, name, lambda *a, **k: {})
+    monkeypatch.setattr(jobs, "refresh_reference", lambda *a, **k: {})
+    with engine.begin() as conn:
+        conn.execute(insert(pro_match_index), [_index_row(90002, "unavailable", "explorer: no player rows")])
+    runner = _runner(engine, tmp_path, [])
+    runner.run("results")
+    with engine.connect() as c:
+        status = c.execute(select(pro_match_index.c.detail_status).where(pro_match_index.c.match_id == 90002)).scalar()
+    assert fake.requested == [90002] and status != "requested"
+
+
+def _stub_explorer(monkeypatch, fake, tmp_path):
+    import dota_predictor.ingest.opendota as od
+    import dota_predictor.service.jobs as jobs
+
+    monkeypatch.setattr(od, "RateLimitedClient", lambda *a, **k: fake)
+    monkeypatch.setattr(get_settings(), "raw_store_dir", tmp_path / "raw")
+    for name in ("sync_explorer_match_index", "sync_explorer_player_matches", "sync_explorer_teams"):
+        monkeypatch.setattr(jobs, name, lambda *a, **k: {})
+    monkeypatch.setattr(jobs, "refresh_reference", lambda *a, **k: {})
+
+
+def test_a_game_is_fetched_as_soon_as_it_leaves_the_feed(engine, tmp_path, monkeypatch):
+    finished = _match(0, 2, 1, True) | {
+        "match_id": 9001,
+        "leagueid": 15000,
+        "league": {"name": "L", "tier": "excluded"},
+    }
+    fake = _OpenDota({9001: finished})
+    _stub_explorer(monkeypatch, fake, tmp_path)
+    feed = [_live(), [], []]
+    runner = _runner(engine, tmp_path, None)
+    runner.live_fetch = lambda: feed.pop(0)
+    runner.run("running")
+    runner.run("running")
+    assert fake.gets == []  # gone for one poll may just be the feed blinking
+    runner.run("running")
+    assert runner.status["running"].last_error is None, runner.status["running"].last_error
+    assert fake.gets == ["/matches/9001"]
+    assert runner.service._games(2) == 31  # folded into the ratings in the same cycle
+
+
+def test_a_requested_game_is_asked_again_after_an_hour_but_at_most_three_times(engine, tmp_path, monkeypatch):
+    fake = _OpenDota({})
+    _stub_explorer(monkeypatch, fake, tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(pro_match_index),
+            [
+                _index_row(90001, "requested", "requests=1", age=timedelta(minutes=30))
+                | {"last_seen_utc": NOW - timedelta(hours=2)},
+                _index_row(90002, "requested", "requests=1") | {"last_seen_utc": NOW - timedelta(minutes=20)},
+                _index_row(90003, "requested", "requests=3") | {"last_seen_utc": NOW - timedelta(hours=5)},
+            ],
+        )
+    runner = _runner(engine, tmp_path, [])
+    runner.run("results")
+    assert runner.status["results"].last_error is None, runner.status["results"].last_error
+    with engine.connect() as c:
+        errors = dict(c.execute(select(pro_match_index.c.match_id, pro_match_index.c.detail_error)).all())
+    assert fake.requested == [90001]
+    assert errors == {90001: "requests=2", 90002: "requests=1", 90003: "requests=3"}
+
+
+def test_running_cycle_grades_a_finished_series(engine, tmp_path, monkeypatch):
+    _stub_explorer(monkeypatch, _OpenDota({}), tmp_path)
+    feed = [_live(), []]
+    runner = _runner(engine, tmp_path, None)
+    runner.live_fetch = lambda: feed.pop(0)
+    runner.run("running")
+    with engine.begin() as conn:
+        conn.execute(
+            insert(pro_match_index),
+            [
+                {
+                    "match_id": 9002 + k,
+                    "series_id": 777,
+                    "series_type": 1,
+                    "radiant_team_id": 2,
+                    "dire_team_id": 1,
+                    "radiant_win": True,
+                    "start_time_utc": NOW,
+                    "first_seen_utc": NOW,
+                    "last_seen_utc": NOW,
+                }
+                for k in range(2)
+            ],
+        )
+    runner.run("running")
+    with engine.connect() as c:
+        assert c.execute(select(fixtures.c.status)).scalar() == "finished"
+        assert c.execute(select(prediction_results.c.result_status)).scalar() in ("won", "lost")

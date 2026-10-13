@@ -24,7 +24,6 @@ logger = get_logger("ingest.explorer")
 
 PROVIDER = "opendota"
 BASE_URL = "https://api.opendota.com/api"
-DEFAULT_TIERS = ("premium", "professional")
 
 
 MIN_PAGE = 250  # below this a timeout is not about query size any more
@@ -76,13 +75,17 @@ def _epoch(dt: datetime) -> int:
 
 def sync_explorer_match_index(
     engine: Engine,
-    tiers: tuple[str, ...] = DEFAULT_TIERS,
+    tiers: tuple[str, ...] | None = None,
     since_utc: datetime = datetime(2022, 1, 1, tzinfo=UTC),
     page_size: int = 2000,  # 10,000-row pages run close to OpenDota's ~15 s query limit
 ) -> dict[str, Any]:
-    """Page every league match of the given tiers into pro_match_index (status pending)."""
+    """Page every league match into pro_match_index (status pending); `tiers` narrows to those league tiers.
+
+    OpenDota only keeps premium and professional league games here, but a league can be re-rated "excluded"
+    later and its games stay; without a tier filter nothing is left behind.
+    """
     client = RateLimitedClient(provider=PROVIDER, base_url=BASE_URL)
-    tier_sql = ",".join(f"'{t}'" for t in tiers)
+    tier_sql = "AND l.tier IN ({}) ".format(",".join(f"'{t}'" for t in tiers)) if tiers else ""
     cursor = 0
     total = 0
     pages = 0
@@ -91,8 +94,8 @@ def sync_explorer_match_index(
             sql = (
                 "SELECT m.match_id, m.start_time, m.duration, m.radiant_win, m.radiant_team_id, m.dire_team_id, "
                 "m.radiant_score, m.dire_score, m.leagueid, l.name AS league_name, l.tier, m.series_id, m.series_type "
-                "FROM matches m JOIN leagues l ON l.leagueid = m.leagueid "
-                f"WHERE l.tier IN ({tier_sql}) AND m.start_time >= {_epoch(since_utc)} AND m.match_id > {cursor} "
+                "FROM matches m LEFT JOIN leagues l ON l.leagueid = m.leagueid "
+                f"WHERE m.start_time >= {_epoch(since_utc)} AND m.match_id > {cursor} {tier_sql}"
                 "AND m.radiant_team_id IS NOT NULL AND m.dire_team_id IS NOT NULL AND m.radiant_win IS NOT NULL "
                 f"ORDER BY m.match_id LIMIT {page_size}"
             )
@@ -112,7 +115,7 @@ def sync_explorer_match_index(
                     conn=conn,
                     provider=PROVIDER,
                     endpoint="/explorer/matches",
-                    request_key=f"tiers={','.join(tiers)};after={cursor}",
+                    request_key=f"tiers={','.join(tiers) if tiers else 'all'};after={cursor}",
                     payload=rows,
                     fetched_at_utc=now,
                 )

@@ -17,10 +17,10 @@ The service follows the pro schedule on its own. It predicts every match before 
 
 - **Schedule.** Pulls running and upcoming tournaments and matches from PandaScore every 10 minutes, including best-of format and tier.
 - **Pre-match predictions.** Side-neutral per-map probability from a LightGBM model trained on about 105,000 pro games, turned into series markets for Bo1, Bo2, Bo3 and Bo5.
-- **Live drafts.** Polls OpenDota's live feed every 2 minutes. Once all ten heroes are picked, it predicts the current map with the post-draft model and recomputes the series odds from the live score.
+- **Live drafts.** Polls OpenDota's live feed every minute. Once all ten heroes are picked, it predicts the current map with the post-draft model and recomputes the series odds from the live score.
 - **Coverage.** Live league games found on OpenDota but missing from the schedule still get a fixture and a prediction. An alert fires if a premium league is being played without appearing in the schedule.
 - **Track record.** One prediction per match is locked just before it starts. It is graded when the series ends, with accuracy, Brier score, log loss and a calibration chart.
-- **Self-updating ratings.** Finished games are pulled in every 30 minutes and folded into team and player ratings without a full rebuild.
+- **Self-updating ratings.** A game is fetched by id the moment it leaves the live feed and folded into team and player ratings within the minute; a series is graded in the same cycle. The explorer backstop every 10 minutes catches games never seen live. Every game seen on the live feed is kept, whatever its league: OpenDota only indexes premium and professional leagues, so a game from any other league is asked for by id and, if OpenDota never stored it, requested from Valve through OpenDota's parse queue. A team that is unknown today is known after its first game.
 - **Team mapping.** Schedule team names are linked to match history only on exact matches, and only to a team with real history or a recent game, because a dead duplicate id often carries the same name. Anything else waits on the Team mapping tab for one click, because look-alike names are often different teams. Live games also fix links automatically when a scheduled match is being played: a team whose link points at a dead duplicate id is recognised by the players on the field, which corrects manual links too.
 
 ## How it works
@@ -28,8 +28,9 @@ The service follows the pro schedule on its own. It predicts every match before 
 ```mermaid
 flowchart LR
   PS[PandaScore<br>schedule] -->|10 min| SCH[schedule job]
-  ODL[OpenDota /live] -->|2 min| RUN[running job]
-  ODE[OpenDota /explorer] -->|30 min| RES[results job]
+  ODL[OpenDota /live] -->|1 min| RUN[running job]
+  ODE[OpenDota /explorer] -->|10 min| RES[results job]
+  ODM[OpenDota /matches, /request] -->|a game that just ended| RUN
   SCH --> DB[(Postgres or SQLite)]
   RUN --> DB
   RES --> DB
@@ -52,7 +53,7 @@ python -m venv .venv
 .venv/Scripts/pip install -e ".[dev]"      # Windows; use .venv/bin/pip elsewhere
 cp .env.example .env                        # then fill in the values
 
-dota-predictor db bootstrap                 # first fill: every pro match since 2022, about 40-60 minutes
+dota-predictor db bootstrap                 # first fill: every league match OpenDota holds since 2022, about an hour
 dota-predictor features build               # leakage-free pregame features
 dota-predictor train lightgbm               # post-draft model  -> models/lightgbm_pregame_v1.joblib
 dota-predictor train lightgbm --pre-draft   # pre-draft model   -> models/lightgbm_predraft_v1.joblib

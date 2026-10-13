@@ -100,12 +100,13 @@ def ingest_match_details_cmd(
 
 @ingest_app.command("explorer-index")
 def ingest_explorer_index_cmd(
-    tiers: str = typer.Option("premium,professional", "--tiers", help="Comma-separated OpenDota league tiers"),
+    tiers: str = typer.Option("", "--tiers", help="Comma-separated OpenDota league tiers; default every league"),
     since: str = typer.Option("2022-01-01", "--since", help="Earliest match date YYYY-MM-DD"),
 ) -> None:
     """Bulk-index league matches via OpenDota /explorer (thousands of matches per request)."""
     since_dt = datetime.strptime(since, "%Y-%m-%d").replace(tzinfo=UTC)
-    res = sync_explorer_match_index(get_engine(), tiers=tuple(t.strip() for t in tiers.split(",")), since_utc=since_dt)
+    tier_list = tuple(t.strip() for t in tiers.split(",") if t.strip()) or None
+    res = sync_explorer_match_index(get_engine(), tiers=tier_list, since_utc=since_dt)
     typer.secho(f"Explorer index sync finished: {res}", fg=typer.colors.GREEN)
 
 
