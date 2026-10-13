@@ -72,6 +72,11 @@ h2:first-child { margin-top: 4px; }
 }
 .toggle[aria-pressed="true"] { color: var(--text); border-color: var(--team-a); }
 
+/* Leagues: one column per league, side by side when there is room */
+.leagues { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px 20px; align-items: start; margin-bottom: 8px; }
+.league { container-type: inline-size; min-width: 0; }
+.league h3 { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font: 600 18px/1.2 var(--display); margin: 0 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+
 /* Match rows */
 .match { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
 .meta { display: flex; gap: 12px; flex-wrap: wrap; align-items: baseline; color: var(--muted); font-size: 13px; }
@@ -151,6 +156,12 @@ input.search { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6
   .team { font-size: 19px; }
   .calib { grid-template-columns: 1fr; }
   .status { margin-left: 0; }
+}
+/* A league column narrower than the page stacks each card's names above its bar */
+@container (max-width: 560px) {
+  .versus { grid-template-columns: 1fr 1fr; }
+  .versus .bar { grid-column: 1 / -1; grid-row: 2; }
+  .team { font-size: 19px; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .bar .a, .bar .b { transition: flex-basis .4s ease; }
@@ -290,9 +301,7 @@ function matchCard(fx, { live = false } = {}) {
   const meta = [
     `<span class="time">${live ? "Map " + ((fx.score_a || 0) + (fx.score_b || 0) + 1) : fmtTime(fx.begin_at_utc)}</span>`,
     live ? "" : `<span>${esc(until(fx.begin_at_utc))}</span>`,
-    `<span>${esc(fx.league_name || "Unknown league")}</span>`,
     `<span>Bo${fx.best_of}</span>`,
-    tierTag(fx.tier),
     fx.source === "opendota" ? `<span title="Not in the schedule; found from the live game">From live game</span>` : "",
     p && p.low_data ? `<span class="flag" title="One team has fewer than 20 games on record">Low data</span>` : "",
   ].join("");
@@ -304,6 +313,7 @@ function matchCard(fx, { live = false } = {}) {
     sub.push(`<span>Games on record <b>${p.games_a}</b> and <b>${p.games_b}</b></span>`);
   }
   if (lp) sub.unshift(`<span>This map <b>${pct(lp.p_map_now)}</b> after the draft</span>`);
+  if (live && fx.locked) sub.unshift(`<span title="The pre-match call that gets graded">Locked pick ${pick(fx.locked.p_series, a, b)}</span>`);
   const canExpand = p && p.rows;
   const isOpen = state.open.has(fx.fixture_id);
   if (canExpand) sub.push(`<button class="details-toggle" aria-expanded="${isOpen}" data-open="${esc(fx.fixture_id)}">${isOpen ? "Hide markets" : "Show markets"}</button>`);
@@ -331,6 +341,17 @@ function matchCard(fx, { live = false } = {}) {
   </article>`;
 }
 
+function leagueSections(rows, opts) {
+  const byLeague = new Map();
+  for (const fx of rows) {
+    const name = fx.league_name || "Unknown league";
+    if (!byLeague.has(name)) byLeague.set(name, []);
+    byLeague.get(name).push(fx);
+  }
+  return `<div class="leagues">${[...byLeague].map(([name, fxs]) =>
+    `<section class="league"><h3>${esc(name)} ${tierTag(fxs[0].tier)}</h3>${fxs.map((fx) => matchCard(fx, opts)).join("")}</section>`).join("")}</div>`;
+}
+
 function tierVisible(t) {
   return state.showLowTiers || !t || MAJOR.has(t) || t === "b" || t === "professional";
 }
@@ -342,19 +363,20 @@ async function viewUpcoming() {
   let html = `<div class="toolbar"><button class="toggle" data-toggle-tiers aria-pressed="${state.showLowTiers}">Show tier C and D</button></div>`;
   html += alertsBlock();
   if (!rows.length) return html + `<p class="empty">No upcoming matches in the schedule yet. Matches usually appear a few days before they are played.</p>`;
-  let day = null;
+  const byDay = new Map();
   for (const fx of rows) {
     const d = fmtDay(fx.begin_at_utc);
-    if (d !== day) { html += `<h2>${esc(d)}</h2>`; day = d; }
-    html += matchCard(fx);
+    if (!byDay.has(d)) byDay.set(d, []);
+    byDay.get(d).push(fx);
   }
+  for (const [d, fxs] of byDay) html += `<h2>${esc(d)}</h2>` + leagueSections(fxs);
   return html;
 }
 
 async function viewLive() {
   const rows = await api("/api/fixtures?status=running");
-  if (!rows.length) return `<p class="empty">No matches are being played right now. Live games show up here within two minutes of their lobby starting.</p>`;
-  return rows.map((fx) => matchCard(fx, { live: true })).join("");
+  if (!rows.length) return `<p class="empty">No matches are being played right now. Live games show up here within a minute of their lobby starting.</p>`;
+  return leagueSections(rows, { live: true });
 }
 
 async function viewResults() {

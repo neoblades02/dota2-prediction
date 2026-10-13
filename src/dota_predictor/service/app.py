@@ -212,7 +212,7 @@ def create_app(
                 )
             }
             locked = {}
-            if status == "finished" and rows:
+            if rows:
                 locked = {
                     r.target_ref: {"p_series": r.p_team_a, "result": r.result_status}
                     for r in conn.execute(

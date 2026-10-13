@@ -11,7 +11,7 @@ from dota_predictor.predict.live_draft import LiveDraftPredictor
 from dota_predictor.predict.service import PredictionService
 from dota_predictor.service.app import create_app
 from dota_predictor.service.jobs import JobRunner
-from dota_predictor.storage.models import fixtures, schedule_tournaments, team_links
+from dota_predictor.storage.models import fixtures, predictions, schedule_tournaments, team_links
 from dota_predictor.storage.repository import init_db
 
 NOW = datetime.now(UTC)
@@ -117,6 +117,7 @@ def client(tmp_path):
     runner = JobRunner(engine, PredictionService(engine, predictor), live_fetch=list, schedule_enabled=False)
     app = create_app(engine=engine, runner=runner, password="pw", start_background=False)
     with TestClient(app) as c:
+        c.engine = engine
         yield c
 
 
@@ -136,6 +137,40 @@ def test_upcoming_fixtures_carry_predictions_and_flags(client):
     assert rows["ps:10"]["begin_at_utc"].endswith("Z")
     assert rows["ps:11"]["needs_mapping"] and "prediction" not in rows["ps:11"]
     assert rows["ps:12"]["tbd"] and rows["ps:12"]["team_a_name"] == "TBD"
+
+
+def test_running_fixture_carries_its_locked_pick(client):
+    with client.engine.begin() as conn:
+        conn.execute(
+            insert(fixtures).values(
+                **_fx(
+                    "ps:13",
+                    status="running",
+                    score_a=1,
+                    begin_at_utc=NOW - timedelta(hours=1),
+                    team_a_id=1,
+                    team_b_id=2,
+                    team_a_name="One",
+                    team_b_name="Two",
+                    ps_team_a_id=101,
+                    ps_team_b_id=102,
+                )
+            )
+        )
+        conn.execute(
+            insert(predictions).values(
+                prediction_key="ps:13|locked|0|m",
+                target_type="fixture",
+                target_ref="ps:13",
+                prediction_type="locked",
+                created_at_utc=NOW,
+                cutoff_at_utc=NOW,
+                model_version="m",
+                p_team_a=0.61,
+            )
+        )
+    (row,) = client.get("/api/fixtures?status=running", auth=AUTH).json()
+    assert row["locked"] == {"p_series": 0.61, "result": None}
 
 
 def test_tournament_counts(client):
